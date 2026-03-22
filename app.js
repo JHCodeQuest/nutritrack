@@ -61,6 +61,7 @@ function showApp(user) {
   dayOffset = 0;
   updateDateNav();
   loadWater();
+  loadExercise();
 }
 
 function toggleUserMenu() {
@@ -89,6 +90,7 @@ function changeDay(delta) {
   renderMeals();
   updateSummary();
   loadWater();
+  loadExercise();
   markSaving();
   // Re-subscribe Firestore for new date
   if (window.resubscribeForDate) window.resubscribeForDate();
@@ -101,6 +103,7 @@ function goToday() {
   renderMeals();
   updateSummary();
   loadWater();
+  loadExercise();
   if (window.resubscribeForDate) window.resubscribeForDate();
 }
 function updateDateNav() {
@@ -503,9 +506,13 @@ function totalKcal(){ return meals.reduce((s,m)=>s+m.items.reduce((ss,i)=>ss+i.k
 function totalMacros(){ const t={carbs:0,protein:0,fat:0}; meals.forEach(m=>m.items.forEach(i=>{t.carbs+=i.carbs;t.protein+=i.protein;t.fat+=i.fat;})); return t; }
 
 function updateSummary(){
-  const consumed=totalKcal(), remaining=Math.max(0,GOAL-consumed), pct=Math.min(consumed/GOAL,1), C=301;
+  const consumed=totalKcal(), exercised=totalExerciseKcal();
+  const netConsumed=consumed-exercised;
+  const remaining=Math.max(0,GOAL-netConsumed), pct=Math.min(Math.max(0,netConsumed)/GOAL,1), C=301;
   document.getElementById('remainingNum').textContent=remaining;
   document.getElementById('consumedVal').textContent=consumed+' kcal';
+  const exVal=document.getElementById('exerciseVal');
+  if(exVal) exVal.textContent=exercised+' kcal';
   document.getElementById('caloriRing').setAttribute('aria-label', `Calorie progress: ${remaining} of ${GOAL} remaining`);
   const circ=document.getElementById('ringCircle');
   circ.style.strokeDashoffset=C-pct*C; circ.style.stroke=consumed>GOAL?'#e05252':'#3ecf8e';
@@ -713,6 +720,111 @@ function updateWaterUI() {
   if (logEl) {
     logEl.innerHTML = waterEntries.map(e => `<span class="water-log-entry">${e.ml}ml · ${e.time}</span>`).join('');
   }
+}
+
+// ── EXERCISE TRACKER ─────────────────────────────────────────────────────
+// MET values: { low, moderate, high } for each exercise type
+const EXERCISE_METS = {
+  walking:         { low: 2.5, moderate: 3.5, high: 4.5, label: 'Walking (casual)' },
+  brisk_walking:   { low: 3.5, moderate: 4.5, high: 5.5, label: 'Brisk walking' },
+  running:         { low: 7.0, moderate: 9.8, high: 12.0, label: 'Running' },
+  cycling:         { low: 4.0, moderate: 6.8, high: 10.0, label: 'Cycling' },
+  swimming:        { low: 4.5, moderate: 6.0, high: 8.0, label: 'Swimming' },
+  yoga:            { low: 2.0, moderate: 3.0, high: 4.0, label: 'Yoga' },
+  hiit:            { low: 6.0, moderate: 8.0, high: 11.0, label: 'HIIT' },
+  weight_training: { low: 3.5, moderate: 5.0, high: 6.0, label: 'Weight training' },
+  dancing:         { low: 3.0, moderate: 4.8, high: 7.0, label: 'Dancing' },
+  rowing:          { low: 4.5, moderate: 7.0, high: 9.5, label: 'Rowing' },
+  jump_rope:       { low: 8.0, moderate: 10.0, high: 12.3, label: 'Jump rope' },
+  stairs:          { low: 4.0, moderate: 6.0, high: 8.5, label: 'Stair climbing' },
+  elliptical:      { low: 4.0, moderate: 5.5, high: 7.5, label: 'Elliptical' },
+  pilates:         { low: 2.5, moderate: 3.5, high: 5.0, label: 'Pilates' },
+  sports:          { low: 4.0, moderate: 6.5, high: 9.0, label: 'Team sports' },
+};
+
+let exerciseEntries = [];
+
+function getExerciseKey() { return 'nutritrack_exercise_' + currentDateKey; }
+
+function loadExercise() {
+  try { exerciseEntries = JSON.parse(localStorage.getItem(getExerciseKey())) || []; }
+  catch(e) { exerciseEntries = []; }
+  renderExerciseLog();
+  updateSummary();
+}
+
+function saveExercise() {
+  localStorage.setItem(getExerciseKey(), JSON.stringify(exerciseEntries));
+  renderExerciseLog();
+  updateSummary();
+}
+
+function calcExerciseKcal(type, intensity, durationMin) {
+  const ex = EXERCISE_METS[type];
+  if (!ex) return 0;
+  const met = ex[intensity] || ex.moderate;
+  // Get user weight from goals, default 75kg
+  const goals = loadGoalData();
+  const weight = (goals && goals.weight) ? goals.weight : 75;
+  // Calories = MET × weight(kg) × duration(hours)
+  return Math.round(met * weight * (durationMin / 60));
+}
+
+function previewExercise() {
+  const type = document.getElementById('exType').value;
+  const duration = parseInt(document.getElementById('exDuration').value) || 0;
+  const intensity = document.getElementById('exIntensity').value;
+  const preview = document.getElementById('exPreview');
+  if (!type || !duration) { preview.innerHTML = ''; return; }
+  const kcal = calcExerciseKcal(type, intensity, duration);
+  const label = EXERCISE_METS[type].label;
+  preview.innerHTML = `<span class="exp-kcal">${kcal} kcal</span><span class="exp-label">${label} · ${duration} min · ${intensity}</span>`;
+}
+
+function addExercise() {
+  const type = document.getElementById('exType').value;
+  const duration = parseInt(document.getElementById('exDuration').value) || 0;
+  const intensity = document.getElementById('exIntensity').value;
+  if (!type || !duration) { showToast('Select exercise and duration', true); return; }
+  const kcal = calcExerciseKcal(type, intensity, duration);
+  const ex = EXERCISE_METS[type];
+  exerciseEntries.push({
+    type, label: ex.label, intensity, duration, kcal,
+    time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  });
+  saveExercise();
+  showToast(`🏃 ${ex.label} — ${kcal} kcal burned`);
+  document.getElementById('exType').value = '';
+  document.getElementById('exDuration').value = '';
+  document.getElementById('exPreview').innerHTML = '';
+}
+
+function deleteExercise(idx) {
+  exerciseEntries.splice(idx, 1);
+  saveExercise();
+}
+
+function totalExerciseKcal() {
+  return exerciseEntries.reduce((s, e) => s + e.kcal, 0);
+}
+
+function renderExerciseLog() {
+  const logEl = document.getElementById('exLog');
+  const totalEl = document.getElementById('exTotal');
+  const total = totalExerciseKcal();
+  if (totalEl) totalEl.textContent = total + ' kcal burned';
+  if (!logEl) return;
+  logEl.innerHTML = exerciseEntries.map((e, idx) => `
+    <div class="ex-log-item">
+      <div class="ex-log-left">
+        <div class="ex-log-name">${escHtml(e.label)}</div>
+        <div class="ex-log-meta">${e.duration} min · ${e.intensity} · ${e.time}</div>
+      </div>
+      <div class="ex-log-kcal">
+        ${e.kcal} kcal
+        <button class="ex-del-btn" onclick="deleteExercise(${idx})" aria-label="Delete ${escHtml(e.label)}">✕</button>
+      </div>
+    </div>`).join('');
 }
 
 // ── GOAL SETTINGS ────────────────────────────────────────────────────────
