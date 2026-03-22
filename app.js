@@ -435,7 +435,7 @@ function showFoodResult(f){
 function changeQty(delta){
   const input=document.getElementById('frQty');
   let val=parseFloat(input.value)||1;
-  val=Math.max(0.25,+(val+delta*0.25).toFixed(2));
+  val=Math.max(1,Math.round(val+delta));
   input.value=val;
   updateQtyPreview();
 }
