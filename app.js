@@ -309,7 +309,7 @@ async function searchFood() {
       let kcal100 = n['energy-kcal_100g'] || (n['energy_100g'] ? n['energy_100g']/4.184 : 0);
       let factor = 1, servingLabel = 'per 100g';
       if (p.serving_size) {
-        const m = p.serving_size.match(/([\d.]+)/);
+        const m = p.serving_size.match(/([\d.]+)\s*g/i);
         if (m) { factor = parseFloat(m[1])/100; servingLabel = `per serving (${p.serving_size})`; }
       }
       const kcal    = Math.round(kcal100 * factor);
@@ -609,7 +609,7 @@ async function inlineSearch(mealId){
       const n=p.nutriments||{};
       let kcal100=n['energy-kcal_100g']||(n['energy_100g']?n['energy_100g']/4.184:0);
       let factor=1,servingLabel='per 100g';
-      if(p.serving_size){const m=p.serving_size.match(/([\d.]+)/);if(m){factor=parseFloat(m[1])/100;servingLabel=`per serving (${p.serving_size})`;}}
+      if(p.serving_size){const m=p.serving_size.match(/([\d.]+)\s*g/i);if(m){factor=parseFloat(m[1])/100;servingLabel=`per serving (${p.serving_size})`;}}
       const food={
         name:p.product_name||'Unknown',
         brand:p.brands||'',
