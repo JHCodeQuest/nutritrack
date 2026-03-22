@@ -413,6 +413,22 @@ function addScannedFood(){
 }
 
 // ── QUAGGA SCANNER ────────────────────────────────────────────────────────
+const QUAGGA_URL = 'https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js';
+let quaggaLoading = null; // single shared promise while script is in-flight
+
+function loadQuagga() {
+  if (typeof Quagga !== 'undefined') return Promise.resolve();
+  if (quaggaLoading) return quaggaLoading;
+  quaggaLoading = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = QUAGGA_URL;
+    s.onload  = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  return quaggaLoading;
+}
+
 let releaseScannerTrap = null;
 function openScanner(mealId){
   currentScanMealId=mealId; lastCode=null; pendingFood=null;
@@ -424,9 +440,10 @@ function openScanner(mealId){
   document.getElementById('searchResults').innerHTML='';
   document.getElementById('searchStatus').textContent='';
   hideFoodResult();
-  // Always start on Scan tab
   switchTab('scan');
   releaseScannerTrap = trapFocus(modal.querySelector('.scanner-modal'), closeScanner);
+  // Load Quagga on first open — subsequent opens resolve instantly from cache
+  loadQuagga().catch(() => showNoCameraNote('Barcode library failed to load. Use manual entry.'));
 }
 function closeScanner(){
   const m=document.getElementById('scannerModal'); m.classList.remove('open'); m.setAttribute('aria-hidden','true');
@@ -434,7 +451,8 @@ function closeScanner(){
   if (releaseScannerTrap) { releaseScannerTrap(); releaseScannerTrap=null; }
 }
 function startQuagga(){
-  if(scannerRunning||typeof Quagga==='undefined') { showNoCameraNote('Barcode library not loaded. Use manual entry.'); return; }
+  if(scannerRunning) return;
+  if(typeof Quagga==='undefined') { showNoCameraNote('Barcode library not loaded. Use manual entry.'); return; }
   Quagga.init({
     inputStream:{ name:'Live', type:'LiveStream', target:document.getElementById('interactive'), constraints:{width:{ideal:1280},height:{ideal:720},facingMode:'environment'} },
     decoder:{ readers:['ean_reader','ean_8_reader','upc_reader','upc_e_reader','code_128_reader'] },

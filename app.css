@@ -5,6 +5,10 @@
 body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;padding:0 0 100px}
 #loginScreen,#mainApp{max-width:480px;margin:0 auto;position:relative}
 
+/* SKIP LINK */
+.skip-link{position:absolute;top:-100%;left:50%;transform:translateX(-50%);background:var(--green);color:#0e0f11;padding:10px 20px;border-radius:0 0 10px 10px;font-size:14px;font-weight:700;text-decoration:none;z-index:10000;white-space:nowrap}
+.skip-link:focus{top:0}
+
 /* LOADING */
 #loadingScreen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999}
 #loadingScreen.hidden{display:none}
