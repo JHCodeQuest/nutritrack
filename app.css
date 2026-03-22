@@ -251,6 +251,12 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .fr-macro-chip{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 10px;text-align:center;flex:1;min-width:58px}
 .fmc-val{font-family:'Syne',sans-serif;font-size:17px;font-weight:700}
 .fmc-label{font-size:12px;color:var(--muted);margin-top:2px}
+.fr-unit-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.fr-unit-label{font-size:13px;color:var(--muted);font-weight:500}
+.fr-unit-select{flex:1;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;cursor:pointer}
+.fr-unit-select:focus{border-color:var(--green)}
+.fr-gram-input{width:60px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;text-align:center}
+.fr-gram-input:focus{border-color:var(--green)}
 .fr-qty-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .fr-qty-label{font-size:13px;color:var(--muted);font-weight:500}
 .fr-qty-ctrl{display:flex;align-items:center;gap:6px}

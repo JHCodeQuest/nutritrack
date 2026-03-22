@@ -281,18 +281,32 @@ async function searchFood() {
   resultsEl.innerHTML = '';
   hideFoodResult();
 
-  try {
-    // Open Food Facts search endpoint — searches product name, returns up to 20 results
-    // We filter to products that have nutrition data (energy > 0)
-    const url = `https://uk.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=20&tagtype_0=countries&tag_contains_0=contains&tag_0=united-kingdom&fields=product_name,brands,nutriments,serving_size,countries_tags,image_thumb_url`;
-    const res  = await fetch(url);
-    const data = await res.json();
-
-    const products = (data.products || []).filter(p =>
-      p.product_name &&
-      p.nutriments &&
-      (p.nutriments['energy-kcal_100g'] || p.nutriments['energy_100g'])
-    );
+  // Cancel previous in-flight request
+  if(_searchAbort) _searchAbort.abort();
+  const cacheKey='modal:'+query.toLowerCase();
+  const cached=_searchCache.get(cacheKey);
+  let products;
+  if(cached){ products=cached; }
+  else {
+    try {
+      _searchAbort=new AbortController();
+      const url = `https://uk.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=20&tagtype_0=countries&tag_contains_0=contains&tag_0=united-kingdom&fields=product_name,brands,nutriments,serving_size,countries_tags,image_thumb_url`;
+      const res  = await fetch(url,{signal:_searchAbort.signal});
+      const data = await res.json();
+      products = (data.products || []).filter(p =>
+        p.product_name &&
+        p.nutriments &&
+        (p.nutriments['energy-kcal_100g'] || p.nutriments['energy_100g'])
+      );
+      if(_searchCache.size>=CACHE_MAX) _searchCache.delete(_searchCache.keys().next().value);
+      _searchCache.set(cacheKey,products);
+    } catch(e) {
+      if(e.name==='AbortError') return;
+      statusEl.textContent = '⚠️ Network error — check connection';
+      statusEl.className = 'search-status error';
+      return;
+    }
+  }
 
     if (products.length === 0) {
       statusEl.textContent = '😕 No results found — try different keywords';
@@ -313,14 +327,17 @@ async function searchFood() {
         if (m) { factor = parseFloat(m[1])/100; servingLabel = `per serving (${p.serving_size})`; }
       }
       const kcal    = Math.round(kcal100 * factor);
-      const carbs   = +((n['carbohydrates_100g']||0)*factor).toFixed(1);
-      const protein = +((n['proteins_100g']||0)*factor).toFixed(1);
-      const fat     = +((n['fat_100g']||0)*factor).toFixed(1);
+      const carbs100 = n['carbohydrates_100g']||0;
+      const protein100 = n['proteins_100g']||0;
+      const fat100 = n['fat_100g']||0;
+      const carbs   = +((carbs100)*factor).toFixed(1);
+      const protein = +((protein100)*factor).toFixed(1);
+      const fat     = +((fat100)*factor).toFixed(1);
       const name    = p.product_name || 'Unknown';
       const brand   = p.brands || '';
 
-      // Build a food object and store it on the element via data attribute
-      const foodObj = JSON.stringify({ name, brand, kcal, carbs, protein, fat, servingLabel });
+      // Build a food object with per-100g base values for flexible qty calculation
+      const foodObj = JSON.stringify({ name, brand, kcal, carbs, protein, fat, servingLabel, kcal100, carbs100, protein100, fat100, servingFactor:factor });
 
       const item = document.createElement('div');
       item.className = 'search-result-item';
@@ -337,11 +354,6 @@ async function searchFood() {
       item.dataset.food = foodObj;
       resultsEl.appendChild(item);
     });
-
-  } catch(e) {
-    statusEl.textContent = '⚠️ Network error — check connection';
-    statusEl.className = 'search-status error';
-  }
 }
 
 // Called when user clicks "Select" on a search result
@@ -374,14 +386,15 @@ async function lookupBarcode(barcode, statusId) {
     let kcal100 = n['energy-kcal_100g'] != null ? n['energy-kcal_100g'] : (n['energy_100g']?n['energy_100g']/4.184:0);
     let factor=1, servingLabel='per 100g';
     if (p.serving_size) { const m=p.serving_size.match(/([\d.]+)\s*g/i); if(m){factor=parseFloat(m[1])/100;servingLabel=`per serving (${p.serving_size})`;} }
+    const carbs100=n['carbohydrates_100g']||0, protein100=n['proteins_100g']||0, fat100=n['fat_100g']||0;
     pendingFood = {
       name:    p.product_name||p.product_name_en||'Unknown Product',
       brand:   p.brands||'',
       kcal:    Math.round(kcal100*factor),
-      carbs:   +((n['carbohydrates_100g']||0)*factor).toFixed(1),
-      protein: +((n['proteins_100g']||0)*factor).toFixed(1),
-      fat:     +((n['fat_100g']||0)*factor).toFixed(1),
-      servingLabel
+      carbs:   +((carbs100)*factor).toFixed(1),
+      protein: +((protein100)*factor).toFixed(1),
+      fat:     +((fat100)*factor).toFixed(1),
+      servingLabel, kcal100, carbs100, protein100, fat100, servingFactor:factor
     };
     showFoodResult(pendingFood);
     setStatus('✅ Found! Choose meal and tap Add.','found',sid);
@@ -403,6 +416,18 @@ function showFoodResult(f){
   document.getElementById('frBrand').textContent=f.brand||'Unknown brand';
   document.getElementById('frServing').textContent='📏 '+f.servingLabel;
   document.getElementById('frQty').value=1;
+  // Reset unit selector — show "per serving" only if serving data exists
+  const unitSel=document.getElementById('frUnit');
+  const servingOpt=unitSel.querySelector('option[value="serving"]');
+  if(f.servingFactor && f.servingFactor!==1){
+    servingOpt.style.display='';
+    unitSel.value='serving';
+  } else {
+    servingOpt.style.display='none';
+    unitSel.value='100g';
+  }
+  document.getElementById('frGrams').style.display='none';
+  document.getElementById('frGrams').value='';
   updateQtyPreview();
   if(currentScanMealId) document.getElementById('frMealSelect').value=currentScanMealId;
   document.getElementById('foodResult').classList.add('show');
@@ -417,23 +442,51 @@ function changeQty(delta){
 function updateQtyPreview(){
   if(!pendingFood) return;
   const qty=parseFloat(document.getElementById('frQty').value)||1;
-  document.getElementById('frKcal').textContent=Math.round(pendingFood.kcal*qty);
-  document.getElementById('frCarbs').textContent=+(pendingFood.carbs*qty).toFixed(1);
-  document.getElementById('frProtein').textContent=+(pendingFood.protein*qty).toFixed(1);
-  document.getElementById('frFat').textContent=+(pendingFood.fat*qty).toFixed(1);
+  const unit=document.getElementById('frUnit').value;
+  const gramInput=document.getElementById('frGrams');
+  const qtyLabel=document.getElementById('frQtyLabel');
+  // Show/hide custom gram input
+  gramInput.style.display=unit==='custom'?'inline-block':'none';
+  // Update qty label
+  if(unit==='serving') qtyLabel.textContent='Servings';
+  else if(unit==='100g') qtyLabel.textContent='Qty (x100g)';
+  else qtyLabel.textContent='Qty';
+  // Calculate factor: how many grams per 1 unit
+  const p=pendingFood;
+  let baseFactor; // factor relative to 100g
+  if(unit==='serving') baseFactor=p.servingFactor||1;
+  else if(unit==='custom') baseFactor=(parseFloat(gramInput.value)||0)/100;
+  else baseFactor=1; // per 100g
+  const totalFactor=baseFactor*qty;
+  document.getElementById('frKcal').textContent=Math.round(p.kcal100*totalFactor);
+  document.getElementById('frCarbs').textContent=+(p.carbs100*totalFactor).toFixed(1);
+  document.getElementById('frProtein').textContent=+(p.protein100*totalFactor).toFixed(1);
+  document.getElementById('frFat').textContent=+(p.fat100*totalFactor).toFixed(1);
 }
 function hideFoodResult(){ document.getElementById('foodResult').classList.remove('show'); pendingFood=null; }
 function addScannedFood(){
   if(!pendingFood) return;
   const qty=parseFloat(document.getElementById('frQty').value)||1;
+  const unit=document.getElementById('frUnit').value;
+  const p=pendingFood;
+  let baseFactor;
+  if(unit==='serving') baseFactor=p.servingFactor||1;
+  else if(unit==='custom') baseFactor=(parseFloat(document.getElementById('frGrams').value)||0)/100;
+  else baseFactor=1;
+  const totalFactor=baseFactor*qty;
   const mealId=document.getElementById('frMealSelect').value;
+  // Build descriptive name
+  let label=p.name;
+  if(unit==='custom'){ const g=parseFloat(document.getElementById('frGrams').value)||0; label+=qty!==1?` (${qty} x ${g}g)`:(` (${g}g)`); }
+  else if(unit==='serving'&&qty!==1) label+=` (x${qty})`;
+  else if(unit==='100g'&&qty!==1) label+=` (x${qty})`;
   const item={
-    name: qty!==1 ? `${pendingFood.name} (x${qty})` : pendingFood.name,
-    brand: pendingFood.brand,
-    kcal: Math.round(pendingFood.kcal*qty),
-    carbs: +(pendingFood.carbs*qty).toFixed(1),
-    protein: +(pendingFood.protein*qty).toFixed(1),
-    fat: +(pendingFood.fat*qty).toFixed(1)
+    name: label,
+    brand: p.brand,
+    kcal: Math.round(p.kcal100*totalFactor),
+    carbs: +(p.carbs100*totalFactor).toFixed(1),
+    protein: +(p.protein100*totalFactor).toFixed(1),
+    fat: +(p.fat100*totalFactor).toFixed(1)
   };
   meals.find(m=>m.id===mealId).items.push(item);
   renderMeals(); openMeal(mealId); updateSummary(); scheduleSave();
@@ -567,7 +620,7 @@ function renderMeals(){
           </div>`).join('')}
         <div class="add-food-row">
           <div class="inline-search-wrap">
-            <input class="food-input" id="fi-${meal.id}" type="text" placeholder="Search food…" aria-label="Search food for ${meal.name}" onkeydown="if(event.key==='Enter')inlineSearch('${meal.id}')" autocomplete="off"/>
+            <input class="food-input" id="fi-${meal.id}" type="text" placeholder="Search food…" aria-label="Search food for ${meal.name}" oninput="debouncedInlineSearch('${meal.id}')" onkeydown="if(event.key==='Enter'){clearTimeout(_inlineDebounce);inlineSearch('${meal.id}')}" autocomplete="off"/>
             <button class="log-btn" onclick="inlineSearch('${meal.id}')">🔍</button>
             <button class="scan-btn" onclick="openScanner('${meal.id}')">📷 Scan</button>
           </div>
@@ -592,17 +645,45 @@ function openMeal(id){
   const btn=log.previousElementSibling; if(btn) btn.setAttribute('aria-expanded','true');
 }
 
+// ── SEARCH OPTIMISATION ─────────────────────────────────────────────────
+let _inlineDebounce = null;
+let _inlineAbort = null;
+let _searchAbort = null;
+const _searchCache = new Map();
+const CACHE_MAX = 50;
+
+function debouncedInlineSearch(mealId) {
+  clearTimeout(_inlineDebounce);
+  const query = document.getElementById('fi-'+mealId).value.trim();
+  if (!query) { document.getElementById('ir-'+mealId).innerHTML = ''; return; }
+  if (query.length < 2) return;
+  _inlineDebounce = setTimeout(() => inlineSearch(mealId), 300);
+}
+
 async function inlineSearch(mealId){
   const input=document.getElementById('fi-'+mealId);
   const query=input.value.trim();
   if(!query) return;
   const resultsEl=document.getElementById('ir-'+mealId);
-  resultsEl.innerHTML='<div class="inline-loading"><span class="spinner"></span>Searching…</div>';
-  try {
-    const url=`https://uk.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=10&tagtype_0=countries&tag_contains_0=contains&tag_0=united-kingdom&fields=product_name,brands,nutriments,serving_size,countries_tags`;
-    const res=await fetch(url);
-    const data=await res.json();
-    const products=(data.products||[]).filter(p=>p.product_name&&p.nutriments&&(p.nutriments['energy-kcal_100g']||p.nutriments['energy_100g']));
+  // Cancel previous in-flight request
+  if(_inlineAbort) _inlineAbort.abort();
+  // Check cache first
+  const cacheKey='inline:'+query.toLowerCase();
+  const cached=_searchCache.get(cacheKey);
+  let products;
+  if(cached){ products=cached; }
+  else {
+    resultsEl.innerHTML='<div class="inline-loading"><span class="spinner"></span>Searching…</div>';
+    try {
+      _inlineAbort=new AbortController();
+      const url=`https://uk.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=10&tagtype_0=countries&tag_contains_0=contains&tag_0=united-kingdom&fields=product_name,brands,nutriments,serving_size,countries_tags`;
+      const res=await fetch(url,{signal:_inlineAbort.signal});
+      const data=await res.json();
+      products=(data.products||[]).filter(p=>p.product_name&&p.nutriments&&(p.nutriments['energy-kcal_100g']||p.nutriments['energy_100g']));
+      if(_searchCache.size>=CACHE_MAX) _searchCache.delete(_searchCache.keys().next().value);
+      _searchCache.set(cacheKey,products);
+    } catch(e){ if(e.name==='AbortError') return; resultsEl.innerHTML='<div class="inline-no-results">Network error</div>'; return; }
+  }
     if(!products.length){ resultsEl.innerHTML='<div class="inline-no-results">No results found</div>'; return; }
     resultsEl.innerHTML='';
     products.forEach(p=>{
@@ -610,14 +691,15 @@ async function inlineSearch(mealId){
       let kcal100=n['energy-kcal_100g']!=null?n['energy-kcal_100g']:(n['energy_100g']?n['energy_100g']/4.184:0);
       let factor=1,servingLabel='per 100g';
       if(p.serving_size){const m=p.serving_size.match(/([\d.]+)\s*g/i);if(m){factor=parseFloat(m[1])/100;servingLabel=`per serving (${p.serving_size})`;}}
+      const carbs100=n['carbohydrates_100g']||0,protein100=n['proteins_100g']||0,fat100=n['fat_100g']||0;
       const food={
         name:p.product_name||'Unknown',
         brand:p.brands||'',
         kcal:Math.round(kcal100*factor),
-        carbs:+((n['carbohydrates_100g']||0)*factor).toFixed(1),
-        protein:+((n['proteins_100g']||0)*factor).toFixed(1),
-        fat:+((n['fat_100g']||0)*factor).toFixed(1),
-        servingLabel
+        carbs:+((carbs100)*factor).toFixed(1),
+        protein:+((protein100)*factor).toFixed(1),
+        fat:+((fat100)*factor).toFixed(1),
+        servingLabel, kcal100, carbs100, protein100, fat100, servingFactor:factor
       };
       const item=document.createElement('div');
       item.className='inline-result-item';
@@ -630,7 +712,6 @@ async function inlineSearch(mealId){
         <button class="iri-add-btn" onclick="addInlineFood('${mealId}',this)">+</button>`;
       resultsEl.appendChild(item);
     });
-  } catch(e){ resultsEl.innerHTML='<div class="inline-no-results">Network error</div>'; }
 }
 function addInlineFood(mealId,btn){
   const item=btn.closest('.inline-result-item');
