@@ -125,6 +125,39 @@
     <div class="macro-row"><div class="macro-name"><span class="macro-shape macro-shape-circle" aria-hidden="true">●</span>Fat</div><div class="macro-bar-bg"><div class="macro-bar-fill" id="fatBar" role="progressbar" aria-label="Fat" aria-valuenow="0" aria-valuemin="0" aria-valuemax="73" style="width:0%;background:var(--orange)"></div></div><div class="macro-val" id="fatVal" style="color:var(--orange)">0g</div></div>
   </div>
 
+  <!-- WATER TRACKER -->
+  <div class="water-card">
+    <div class="water-header">
+      <div>
+        <div class="water-title">💧 Water Intake</div>
+        <div class="water-sub" id="waterSub">0 / 2500 ml</div>
+      </div>
+      <div class="water-ring-wrap">
+        <svg width="52" height="52" viewBox="0 0 52 52" role="img" aria-label="Water progress">
+          <circle cx="26" cy="26" r="21" fill="none" stroke="var(--card2)" stroke-width="5"/>
+          <circle id="waterRing" cx="26" cy="26" r="21" fill="none" stroke="var(--blue)" stroke-width="5"
+            stroke-dasharray="132" stroke-dashoffset="132" stroke-linecap="round"
+            style="transition:stroke-dashoffset .6s cubic-bezier(.4,0,.2,1);transform:rotate(-90deg);transform-origin:center"/>
+        </svg>
+        <div class="water-ring-pct" id="waterPct">0%</div>
+      </div>
+    </div>
+    <div class="water-bar-bg"><div class="water-bar-fill" id="waterBar" style="width:0%"></div></div>
+    <div class="water-presets">
+      <button class="water-preset" onclick="addWater(150)">🥤 150ml</button>
+      <button class="water-preset" onclick="addWater(250)">🥛 250ml</button>
+      <button class="water-preset" onclick="addWater(330)">🫗 330ml</button>
+      <button class="water-preset" onclick="addWater(500)">🍶 500ml</button>
+      <button class="water-preset" onclick="addWater(750)">🧴 750ml</button>
+    </div>
+    <div class="water-custom-row">
+      <input class="water-custom-input" id="waterCustom" type="number" min="1" placeholder="Custom ml…" aria-label="Custom water amount in ml" onkeydown="if(event.key==='Enter')addCustomWater()"/>
+      <button class="water-custom-btn" onclick="addCustomWater()">+ Add</button>
+      <button class="water-undo-btn" onclick="undoWater()" aria-label="Undo last water entry" id="waterUndoBtn" style="display:none">↩ Undo</button>
+    </div>
+    <div class="water-log" id="waterLog"></div>
+  </div>
+
   <div class="section-hdr"><h2>Today's Log</h2></div>
   <div class="meals" id="mealsContainer"></div>
 
@@ -291,6 +324,11 @@
           <option value="0.25">Gain 0.25 kg/week</option>
           <option value="0.5">Gain 0.5 kg/week</option>
         </select>
+      </div>
+
+      <div class="gf-row">
+        <label class="gf-label" for="gfWater">Daily water goal</label>
+        <div class="gf-input-wrap"><input class="gf-input" id="gfWater" type="number" min="500" max="6000" step="100" placeholder="2500" onchange="updateGoalPreview()"/><span class="gf-unit">ml</span></div>
       </div>
 
       <div class="gf-section-label">Health conditions <span style="color:var(--muted);font-weight:400">(optional)</span></div>

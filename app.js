@@ -60,6 +60,7 @@ function showApp(user) {
   currentDateKey = todayKey();
   dayOffset = 0;
   updateDateNav();
+  loadWater();
 }
 
 function toggleUserMenu() {
@@ -87,6 +88,7 @@ function changeDay(delta) {
   updateDateNav();
   renderMeals();
   updateSummary();
+  loadWater();
   markSaving();
   // Re-subscribe Firestore for new date
   if (window.resubscribeForDate) window.resubscribeForDate();
@@ -98,6 +100,7 @@ function goToday() {
   updateDateNav();
   renderMeals();
   updateSummary();
+  loadWater();
   if (window.resubscribeForDate) window.resubscribeForDate();
 }
 function updateDateNav() {
@@ -652,6 +655,66 @@ function showToast(msg,err=false){
 document.getElementById('scannerModal').addEventListener('click',function(e){if(e.target===this)closeScanner();});
 document.getElementById('confirmOverlay').addEventListener('click',function(e){if(e.target===this)closeConfirm();});
 
+// ── WATER TRACKER ────────────────────────────────────────────────────────
+let WATER_GOAL = 2500; // ml
+let waterEntries = []; // array of {ml, time}
+
+function getWaterKey() { return 'nutritrack_water_' + currentDateKey; }
+
+function loadWater() {
+  try { waterEntries = JSON.parse(localStorage.getItem(getWaterKey())) || []; }
+  catch(e) { waterEntries = []; }
+  updateWaterUI();
+}
+
+function saveWater() {
+  localStorage.setItem(getWaterKey(), JSON.stringify(waterEntries));
+  updateWaterUI();
+}
+
+function addWater(ml) {
+  waterEntries.push({ ml, time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) });
+  saveWater();
+  showToast(`💧 +${ml}ml water`);
+}
+
+function addCustomWater() {
+  const input = document.getElementById('waterCustom');
+  const ml = parseInt(input.value);
+  if (!ml || ml <= 0) return;
+  addWater(ml);
+  input.value = '';
+}
+
+function undoWater() {
+  if (!waterEntries.length) return;
+  const removed = waterEntries.pop();
+  saveWater();
+  showToast(`↩ Removed ${removed.ml}ml`);
+}
+
+function updateWaterUI() {
+  const total = waterEntries.reduce((s, e) => s + e.ml, 0);
+  const pct = Math.min(total / WATER_GOAL, 1);
+  const C = 132; // circumference of water ring
+
+  const sub = document.getElementById('waterSub');
+  const bar = document.getElementById('waterBar');
+  const ring = document.getElementById('waterRing');
+  const pctEl = document.getElementById('waterPct');
+  const undoBtn = document.getElementById('waterUndoBtn');
+  const logEl = document.getElementById('waterLog');
+
+  if (sub) sub.textContent = `${total} / ${WATER_GOAL} ml`;
+  if (bar) bar.style.width = (pct * 100) + '%';
+  if (ring) ring.style.strokeDashoffset = C - pct * C;
+  if (pctEl) pctEl.textContent = Math.round(pct * 100) + '%';
+  if (undoBtn) undoBtn.style.display = waterEntries.length ? 'block' : 'none';
+  if (logEl) {
+    logEl.innerHTML = waterEntries.map(e => `<span class="water-log-entry">${e.ml}ml · ${e.time}</span>`).join('');
+  }
+}
+
 // ── GOAL SETTINGS ────────────────────────────────────────────────────────
 let releaseGoalTrap = null;
 
@@ -735,6 +798,7 @@ function openGoalSettings() {
     document.getElementById('gfTarget').value = saved.target || '';
     document.getElementById('gfActivity').value = saved.activity || '1.55';
     document.getElementById('gfRate').value = saved.rate || '-0.5';
+    document.getElementById('gfWater').value = saved.waterGoal || 2500;
     // Restore condition checkboxes
     const conditions = saved.conditions || [];
     document.querySelectorAll('#gfConditions input').forEach(el => {
@@ -769,6 +833,7 @@ function getGoalFormData() {
     target: parseFloat(document.getElementById('gfTarget').value) || 0,
     activity: parseFloat(document.getElementById('gfActivity').value) || 1.55,
     rate: parseFloat(document.getElementById('gfRate').value) || 0,
+    waterGoal: parseInt(document.getElementById('gfWater').value) || 2500,
     conditions
   };
 }
@@ -817,6 +882,11 @@ function applyGoals(data) {
   const g = calcGoals(data);
   GOAL = g.dailyCal;
   MACRO_GOALS = g.macros;
+  // Update water goal
+  if (data.waterGoal) {
+    WATER_GOAL = data.waterGoal;
+    updateWaterUI();
+  }
   // Update header badge
   const badge = document.querySelector('.goal-badge');
   if (badge) badge.textContent = `Goal: ${GOAL} kcal`;
