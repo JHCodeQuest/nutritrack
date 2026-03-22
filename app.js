@@ -395,20 +395,42 @@ function showFoodResult(f){
   document.getElementById('frName').textContent=f.name;
   document.getElementById('frBrand').textContent=f.brand||'Unknown brand';
   document.getElementById('frServing').textContent='📏 '+f.servingLabel;
-  document.getElementById('frKcal').textContent=f.kcal;
-  document.getElementById('frCarbs').textContent=f.carbs;
-  document.getElementById('frProtein').textContent=f.protein;
-  document.getElementById('frFat').textContent=f.fat;
+  document.getElementById('frQty').value=1;
+  updateQtyPreview();
   if(currentScanMealId) document.getElementById('frMealSelect').value=currentScanMealId;
   document.getElementById('foodResult').classList.add('show');
+}
+function changeQty(delta){
+  const input=document.getElementById('frQty');
+  let val=parseFloat(input.value)||1;
+  val=Math.max(0.25,+(val+delta*0.25).toFixed(2));
+  input.value=val;
+  updateQtyPreview();
+}
+function updateQtyPreview(){
+  if(!pendingFood) return;
+  const qty=parseFloat(document.getElementById('frQty').value)||1;
+  document.getElementById('frKcal').textContent=Math.round(pendingFood.kcal*qty);
+  document.getElementById('frCarbs').textContent=+(pendingFood.carbs*qty).toFixed(1);
+  document.getElementById('frProtein').textContent=+(pendingFood.protein*qty).toFixed(1);
+  document.getElementById('frFat').textContent=+(pendingFood.fat*qty).toFixed(1);
 }
 function hideFoodResult(){ document.getElementById('foodResult').classList.remove('show'); pendingFood=null; }
 function addScannedFood(){
   if(!pendingFood) return;
+  const qty=parseFloat(document.getElementById('frQty').value)||1;
   const mealId=document.getElementById('frMealSelect').value;
-  meals.find(m=>m.id===mealId).items.push({...pendingFood});
+  const item={
+    name: qty!==1 ? `${pendingFood.name} (x${qty})` : pendingFood.name,
+    brand: pendingFood.brand,
+    kcal: Math.round(pendingFood.kcal*qty),
+    carbs: +(pendingFood.carbs*qty).toFixed(1),
+    protein: +(pendingFood.protein*qty).toFixed(1),
+    fat: +(pendingFood.fat*qty).toFixed(1)
+  };
+  meals.find(m=>m.id===mealId).items.push(item);
   renderMeals(); openMeal(mealId); updateSummary(); scheduleSave();
-  showToast(`${pendingFood.name} added!`);
+  showToast(`${item.name} added!`);
   closeScanner();
 }
 
@@ -533,10 +555,12 @@ function renderMeals(){
             </div>
           </div>`).join('')}
         <div class="add-food-row">
-          <button class="scan-btn" onclick="openScanner('${meal.id}')">📷 Scan</button>
-          <input class="food-input" id="fi-${meal.id}" type="text" placeholder="Food name…" aria-label="Food name for ${meal.name}" onkeydown="if(event.key==='Enter')addManual('${meal.id}')"/>
-          <input class="kcal-input" id="ki-${meal.id}" type="number" placeholder="kcal" aria-label="Calories for ${meal.name}" onkeydown="if(event.key==='Enter')addManual('${meal.id}')"/>
-          <button class="log-btn" onclick="addManual('${meal.id}')">+ Log</button>
+          <div class="inline-search-wrap">
+            <input class="food-input" id="fi-${meal.id}" type="text" placeholder="Search food…" aria-label="Search food for ${meal.name}" onkeydown="if(event.key==='Enter')inlineSearch('${meal.id}')" autocomplete="off"/>
+            <button class="log-btn" onclick="inlineSearch('${meal.id}')">🔍</button>
+            <button class="scan-btn" onclick="openScanner('${meal.id}')">📷 Scan</button>
+          </div>
+          <div class="inline-results" id="ir-${meal.id}"></div>
         </div>
       </div>`;
     container.appendChild(card);
@@ -557,18 +581,62 @@ function openMeal(id){
   const btn=log.previousElementSibling; if(btn) btn.setAttribute('aria-expanded','true');
 }
 
-function addManual(mealId){
-  const ni=document.getElementById('fi-'+mealId), ki=document.getElementById('ki-'+mealId);
-  const name=ni.value.trim(), kcal=parseInt(ki.value);
-  if(!name||!kcal||kcal<=0) return;
-  meals.find(m=>m.id===mealId).items.push({name,brand:'',kcal,...estimateMacros(kcal)});
-  ni.value=''; ki.value='';
-  renderMeals(); openMeal(mealId); updateSummary(); scheduleSave();
+async function inlineSearch(mealId){
+  const input=document.getElementById('fi-'+mealId);
+  const query=input.value.trim();
+  if(!query) return;
+  const resultsEl=document.getElementById('ir-'+mealId);
+  resultsEl.innerHTML='<div class="inline-loading"><span class="spinner"></span>Searching…</div>';
+  try {
+    const url=`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=10&fields=product_name,brands,nutriments,serving_size`;
+    const res=await fetch(url);
+    const data=await res.json();
+    const products=(data.products||[]).filter(p=>p.product_name&&p.nutriments&&(p.nutriments['energy-kcal_100g']||p.nutriments['energy_100g']));
+    if(!products.length){ resultsEl.innerHTML='<div class="inline-no-results">No results found</div>'; return; }
+    resultsEl.innerHTML='';
+    products.forEach(p=>{
+      const n=p.nutriments||{};
+      let kcal100=n['energy-kcal_100g']||(n['energy_100g']?n['energy_100g']/4.184:0);
+      let factor=1,servingLabel='per 100g';
+      if(p.serving_size){const m=p.serving_size.match(/([\d.]+)/);if(m){factor=parseFloat(m[1])/100;servingLabel=`per serving (${p.serving_size})`;}}
+      const food={
+        name:p.product_name||'Unknown',
+        brand:p.brands||'',
+        kcal:Math.round(kcal100*factor),
+        carbs:+((n['carbohydrates_100g']||0)*factor).toFixed(1),
+        protein:+((n['proteins_100g']||0)*factor).toFixed(1),
+        fat:+((n['fat_100g']||0)*factor).toFixed(1),
+        servingLabel
+      };
+      const item=document.createElement('div');
+      item.className='inline-result-item';
+      item.dataset.food=JSON.stringify(food);
+      item.innerHTML=`
+        <div class="iri-left">
+          <div class="iri-name">${escHtml(food.name)}</div>
+          <div class="iri-meta">${food.brand?escHtml(food.brand)+' · ':''}${food.kcal} kcal · ${food.carbs}g C · ${food.protein}g P · ${food.fat}g F</div>
+        </div>
+        <button class="iri-add-btn" onclick="addInlineFood('${mealId}',this)">+</button>`;
+      resultsEl.appendChild(item);
+    });
+  } catch(e){ resultsEl.innerHTML='<div class="inline-no-results">Network error</div>'; }
+}
+function addInlineFood(mealId,btn){
+  const item=btn.closest('.inline-result-item');
+  const food=JSON.parse(item.dataset.food);
+  currentScanMealId=mealId;
+  const modal=document.getElementById('scannerModal');
+  modal.classList.add('open');
+  modal.removeAttribute('aria-hidden');
+  switchTab('search');
+  // Set pendingFood after switchTab (which calls hideFoodResult and clears it)
+  pendingFood=food;
+  showFoodResult(food);
+  releaseScannerTrap=trapFocus(modal.querySelector('.scanner-modal'),closeScanner);
 }
 function deleteItem(mealId,idx){
   meals.find(m=>m.id===mealId).items.splice(idx,1);
   renderMeals(); openMeal(mealId); updateSummary(); scheduleSave();
-  // Delete buttons have no stable ID — move focus to the food name input for this meal
   const input = document.getElementById('fi-'+mealId);
   if (input) input.focus();
 }
