@@ -111,7 +111,8 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .food-kcal{font-size:13px;font-weight:600}
 .del-btn{background:none;border:none;color:var(--red);cursor:pointer;font-size:13px;opacity:.6;padding:2px 5px;transition:opacity .2s}
 .del-btn:hover{opacity:1}
-.add-food-row{display:flex;gap:7px;margin-top:11px;border-top:1px solid var(--border);padding-top:12px;flex-wrap:wrap}
+.add-food-row{margin-top:11px;border-top:1px solid var(--border);padding-top:12px}
+.inline-search-wrap{display:flex;gap:7px;flex-wrap:wrap}
 .food-input{flex:1;min-width:100px;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:8px 11px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none}
 .food-input:focus{border-color:var(--green)}
 .food-input::placeholder{color:var(--muted)}
@@ -122,6 +123,19 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .log-btn:hover{opacity:.85}
 .scan-btn{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:8px 11px;color:var(--text);cursor:pointer;display:flex;align-items:center;gap:5px;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:600;transition:all .2s}
 .scan-btn:hover{border-color:var(--green);color:var(--green)}
+
+/* INLINE SEARCH RESULTS */
+.inline-results{max-height:200px;overflow-y:auto;margin-top:8px}
+.inline-results:empty{display:none}
+.inline-loading{font-size:12px;color:var(--muted);padding:8px 0}
+.inline-no-results{font-size:12px;color:var(--muted);padding:8px 0}
+.inline-result-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
+.inline-result-item:last-child{border-bottom:none}
+.iri-left{flex:1;min-width:0}
+.iri-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.iri-meta{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.iri-add-btn{width:28px;height:28px;border-radius:8px;border:1px solid var(--green);background:none;color:var(--green);font-size:16px;font-weight:700;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.iri-add-btn:hover{background:var(--green);color:#0e0f11}
 
 /* GOAL + EXERCISE */
 .goal-card{margin:12px 14px 0;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:17px 18px}
@@ -201,6 +215,13 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .fr-macro-chip{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 10px;text-align:center;flex:1;min-width:58px}
 .fmc-val{font-family:'Syne',sans-serif;font-size:17px;font-weight:700}
 .fmc-label{font-size:12px;color:var(--muted);margin-top:2px}
+.fr-qty-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.fr-qty-label{font-size:13px;color:var(--muted);font-weight:500}
+.fr-qty-ctrl{display:flex;align-items:center;gap:6px}
+.fr-qty-btn{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:16px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;font-family:'DM Sans',sans-serif}
+.fr-qty-btn:hover{border-color:var(--green);color:var(--green)}
+.fr-qty-input{width:52px;text-align:center;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 4px;color:var(--text);font-size:14px;font-weight:600;font-family:'DM Sans',sans-serif;outline:none}
+.fr-qty-input:focus{border-color:var(--green)}
 .fr-actions{display:flex;gap:8px}
 .fr-meal-select{flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px 11px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;cursor:pointer}
 .fr-add-btn{background:var(--green);border:none;border-radius:10px;padding:9px 18px;color:#0e0f11;font-weight:700;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif}
