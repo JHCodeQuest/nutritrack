@@ -18,7 +18,14 @@ import { getFirestore, doc, setDoc, getDoc, onSnapshot }
                                                   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // Your Firebase project config — these are safe to be in frontend code
-
+const firebaseConfig = {
+  apiKey:            "AIzaSyAvEEu5fVhw-53xddvP7Weh3uo7THwMPN4",
+  authDomain:        "nutritrack-5fc63.firebaseapp.com",
+  projectId:         "nutritrack-5fc63",
+  storageBucket:     "nutritrack-5fc63.firebasestorage.app",
+  messagingSenderId: "201676177627",
+  appId:             "1:201676177627:web:857b03681e244bedbf0cfe"
+};
 
 // Initialise Firebase — think of this like "connecting to the database"
 const firebaseApp = initializeApp(firebaseConfig);
@@ -260,21 +267,53 @@ window._firebaseDb   = db;
   <div class="scanner-modal">
     <button class="close-btn" onclick="closeScanner()">✕</button>
     <div class="modal-handle"></div>
-    <div class="modal-title">📷 Scan Barcode</div>
-    <div class="modal-sub">Point camera at a food barcode. Data from Open Food Facts — 3M+ products.</div>
-    <div id="cameraArea">
-      <div class="scanner-viewport">
-        <div id="interactive"></div>
-        <div class="scan-line"></div>
-        <div class="scan-corner sc-tl"></div><div class="scan-corner sc-tr"></div>
-        <div class="scan-corner sc-bl"></div><div class="scan-corner sc-br"></div>
+    <div class="modal-title">Add Food</div>
+
+    <!-- TABS -->
+    <div class="modal-tabs">
+      <button class="modal-tab active" id="tabScan"   onclick="switchTab('scan')">📷 Scan</button>
+      <button class="modal-tab"        id="tabSearch" onclick="switchTab('search')">🔍 Search</button>
+      <button class="modal-tab"        id="tabBarcode" onclick="switchTab('barcode')">🔢 Barcode</button>
+    </div>
+
+    <!-- TAB: SCAN -->
+    <div id="paneScan">
+      <div class="modal-sub">Point camera at any food barcode — EAN, UPC supported.</div>
+      <div id="cameraArea">
+        <div class="scanner-viewport">
+          <div id="interactive"></div>
+          <div class="scan-line"></div>
+          <div class="scan-corner sc-tl"></div><div class="scan-corner sc-tr"></div>
+          <div class="scan-corner sc-bl"></div><div class="scan-corner sc-br"></div>
+        </div>
       </div>
+      <div class="scan-status" id="scanStatus">Ready to scan</div>
     </div>
-    <div class="scan-status" id="scanStatus">Ready to scan</div>
-    <div class="manual-barcode-row">
-      <input class="barcode-text-input" id="manualBarcode" type="number" placeholder="Or type barcode number…" onkeydown="if(event.key==='Enter')lookupManual()"/>
-      <button class="lookup-btn" onclick="lookupManual()">Look up</button>
+
+    <!-- TAB: SEARCH -->
+    <div id="paneSearch" style="display:none">
+      <div class="modal-sub">Search by food name — powered by Open Food Facts (3M+ products).</div>
+      <div class="search-row">
+        <input class="search-input" id="foodSearchInput" type="text" placeholder="e.g. banana, chicken breast, oat milk…"
+          onkeydown="if(event.key==='Enter')searchFood()"/>
+        <button class="lookup-btn" onclick="searchFood()">Search</button>
+      </div>
+      <div class="search-status" id="searchStatus"></div>
+      <div class="search-results" id="searchResults"></div>
     </div>
+
+    <!-- TAB: BARCODE -->
+    <div id="paneBarcode" style="display:none">
+      <div class="modal-sub">Enter a barcode number manually to look up a product.</div>
+      <div class="manual-barcode-row">
+        <input class="barcode-text-input" id="manualBarcode" type="number" placeholder="e.g. 5000112546415"
+          onkeydown="if(event.key==='Enter')lookupManual()"/>
+        <button class="lookup-btn" onclick="lookupManual()">Look up</button>
+      </div>
+      <div class="scan-status" id="barcodeStatus"></div>
+    </div>
+
+    <!-- FOOD RESULT (shared across all tabs) -->
     <div class="food-result" id="foodResult">
       <div class="fr-name" id="frName"></div>
       <div class="fr-brand" id="frBrand"></div>
@@ -429,6 +468,34 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .ex-chips{display:flex;gap:8px;flex-wrap:wrap}
 .ex-chip{display:flex;align-items:center;gap:6px;background:var(--card2);border:1px solid var(--border);border-radius:50px;padding:6px 13px;font-size:12px;font-weight:500}
 .ex-dot{width:7px;height:7px;border-radius:50%}
+
+/* MODAL TABS */
+.modal-tabs{display:flex;gap:6px;margin-bottom:18px}
+.modal-tab{flex:1;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:9px 6px;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s}
+.modal-tab.active{background:var(--green);border-color:var(--green);color:#0e0f11}
+.modal-tab:hover:not(.active){color:var(--text);border-color:var(--green)}
+
+/* SEARCH */
+.search-row{display:flex;gap:8px;margin-bottom:12px}
+.search-input{flex:1;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:10px 13px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none}
+.search-input:focus{border-color:var(--green)}
+.search-input::placeholder{color:var(--muted)}
+.search-status{text-align:center;font-size:13px;color:var(--muted);min-height:20px;margin-bottom:8px}
+.search-status.error{color:var(--red)}
+.search-results{display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto;padding-right:2px}
+.search-results::-webkit-scrollbar{width:4px}
+.search-results::-webkit-scrollbar-track{background:var(--card2);border-radius:99px}
+.search-results::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+.search-result-item{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;cursor:pointer;transition:border-color .2s;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.search-result-item:hover{border-color:var(--green)}
+.sri-left{flex:1;min-width:0}
+.sri-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sri-brand{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sri-right{display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0;gap:2px}
+.sri-kcal{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--green)}
+.sri-macros{font-size:10px;color:var(--muted);white-space:nowrap}
+.sri-select-btn{background:var(--green);border:none;border-radius:8px;padding:5px 10px;color:#0e0f11;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:4px}
+.no-results{text-align:center;padding:20px;color:var(--muted);font-size:13px}
 
 /* SCANNER MODAL */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:1000;align-items:flex-end;justify-content:center}
@@ -669,16 +736,127 @@ function clearDay() {
   showToast('🗑 Day cleared');
 }
 
-// ── OPEN FOOD FACTS ───────────────────────────────────────────────────────
-async function lookupBarcode(barcode) {
+// ── TAB SWITCHING ─────────────────────────────────────────────────────────
+function switchTab(tab) {
+  // Update tab button styles
+  ['scan','search','barcode'].forEach(t => {
+    document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('active', t===tab);
+    document.getElementById('pane'+t.charAt(0).toUpperCase()+t.slice(1)).style.display = t===tab ? 'block' : 'none';
+  });
+  hideFoodResult();
+  // Start/stop camera depending on active tab
+  if (tab === 'scan') {
+    setTimeout(startQuagga, 200);
+  } else {
+    stopQuagga();
+  }
+  // Focus search input when switching to search
+  if (tab === 'search') {
+    setTimeout(() => document.getElementById('foodSearchInput').focus(), 100);
+  }
+}
+
+// ── FOOD NAME SEARCH (Open Food Facts search API) ─────────────────────────
+async function searchFood() {
+  const query = document.getElementById('foodSearchInput').value.trim();
+  if (!query) return;
+
+  const statusEl  = document.getElementById('searchStatus');
+  const resultsEl = document.getElementById('searchResults');
+  statusEl.innerHTML = '<span class="spinner"></span>Searching…';
+  statusEl.className = 'search-status';
+  resultsEl.innerHTML = '';
+  hideFoodResult();
+
+  try {
+    // Open Food Facts search endpoint — searches product name, returns up to 20 results
+    // We filter to products that have nutrition data (energy > 0)
+    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=20&fields=product_name,brands,nutriments,serving_size,image_thumb_url`;
+    const res  = await fetch(url);
+    const data = await res.json();
+
+    const products = (data.products || []).filter(p =>
+      p.product_name &&
+      p.nutriments &&
+      (p.nutriments['energy-kcal_100g'] || p.nutriments['energy_100g'])
+    );
+
+    if (products.length === 0) {
+      statusEl.textContent = '😕 No results found — try different keywords';
+      statusEl.className = 'search-status error';
+      return;
+    }
+
+    statusEl.textContent = `${products.length} result${products.length!==1?'s':''} found`;
+    statusEl.className = 'search-status';
+
+    resultsEl.innerHTML = '';
+    products.forEach((p, idx) => {
+      const n = p.nutriments || {};
+      let kcal100 = n['energy-kcal_100g'] || (n['energy_100g'] ? n['energy_100g']/4.184 : 0);
+      let factor = 1, servingLabel = 'per 100g';
+      if (p.serving_size) {
+        const m = p.serving_size.match(/([\d.]+)/);
+        if (m) { factor = parseFloat(m[1])/100; servingLabel = `per serving (${p.serving_size})`; }
+      }
+      const kcal    = Math.round(kcal100 * factor);
+      const carbs   = +((n['carbohydrates_100g']||0)*factor).toFixed(1);
+      const protein = +((n['proteins_100g']||0)*factor).toFixed(1);
+      const fat     = +((n['fat_100g']||0)*factor).toFixed(1);
+      const name    = p.product_name || 'Unknown';
+      const brand   = p.brands || '';
+
+      // Build a food object and store it on the element via data attribute
+      const foodObj = JSON.stringify({ name, brand, kcal, carbs, protein, fat, servingLabel });
+
+      const item = document.createElement('div');
+      item.className = 'search-result-item';
+      item.innerHTML = `
+        <div class="sri-left">
+          <div class="sri-name">${escHtml(name)}</div>
+          ${brand ? `<div class="sri-brand">${escHtml(brand)}</div>` : ''}
+        </div>
+        <div class="sri-right">
+          <div class="sri-kcal">${kcal} kcal</div>
+          <div class="sri-macros">${carbs}g C · ${protein}g P · ${fat}g F</div>
+          <button class="sri-select-btn" onclick="selectSearchResult(this)">Select</button>
+        </div>`;
+      item.dataset.food = foodObj;
+      resultsEl.appendChild(item);
+    });
+
+  } catch(e) {
+    statusEl.textContent = '⚠️ Network error — check connection';
+    statusEl.className = 'search-status error';
+  }
+}
+
+// Called when user clicks "Select" on a search result
+function selectSearchResult(btn) {
+  const item = btn.closest('.search-result-item');
+  const food = JSON.parse(item.dataset.food);
+
+  // Highlight selected item
+  document.querySelectorAll('.search-result-item').forEach(el => el.style.borderColor = '');
+  item.style.borderColor = 'var(--green)';
+
+  pendingFood = food;
+  showFoodResult(food);
+  // Scroll down to show the food result card
+  item.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+// ── OPEN FOOD FACTS BARCODE LOOKUP ────────────────────────────────────────
+async function lookupBarcode(barcode, statusId) {
+  const sid = statusId || 'scanStatus';
   barcode = String(barcode).trim().replace(/\D/g,'');
-  if (!barcode) { setStatus('Please enter a barcode','error'); return; }
-  setStatus('<span class="spinner"></span>Looking up…','');
+  if (!barcode) { setStatus('Please enter a barcode','error',sid); return; }
+  setStatus('<span class="spinner"></span>Looking up…','',sid);
   hideFoodResult();
   try {
     const res  = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
     const data = await res.json();
-    if (!data || data.status===0 || !data.product) { setStatus('❌ Product not found','error'); lastCode=null; return; }
+    if (!data || data.status===0 || !data.product) { setStatus('❌ Product not found','error',sid); lastCode=null; return; }
     const p=data.product, n=p.nutriments||{};
     let kcal100 = n['energy-kcal_100g'] || (n['energy_100g']?n['energy_100g']/4.184:0);
     let factor=1, servingLabel='per 100g';
@@ -693,11 +871,20 @@ async function lookupBarcode(barcode) {
       servingLabel
     };
     showFoodResult(pendingFood);
-    setStatus('✅ Found! Choose meal and tap Add.','found');
-  } catch(e) { setStatus('⚠️ Network error','error'); lastCode=null; }
+    setStatus('✅ Found! Choose meal and tap Add.','found',sid);
+  } catch(e) { setStatus('⚠️ Network error','error',sid); lastCode=null; }
 }
-function lookupManual() { lastCode=null; lookupBarcode(document.getElementById('manualBarcode').value); }
-function setStatus(html,cls){ const el=document.getElementById('scanStatus'); el.innerHTML=html; el.className='scan-status'+(cls?' '+cls:''); }
+function lookupManual(){
+  lastCode=null;
+  const barcode = document.getElementById('manualBarcode').value;
+  lookupBarcode(barcode, 'barcodeStatus');
+}
+function setStatus(html,cls,elId){
+  const id = elId || 'scanStatus';
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML=html; el.className='scan-status'+(cls?' '+cls:'');
+}
 function showFoodResult(f){
   document.getElementById('frName').textContent=f.name;
   document.getElementById('frBrand').textContent=f.brand||'Unknown brand';
@@ -724,8 +911,12 @@ function openScanner(mealId){
   currentScanMealId=mealId; lastCode=null; pendingFood=null;
   document.getElementById('scannerModal').classList.add('open');
   document.getElementById('manualBarcode').value='';
-  hideFoodResult(); setStatus('Starting camera…','');
-  setTimeout(startQuagga,300);
+  document.getElementById('foodSearchInput').value='';
+  document.getElementById('searchResults').innerHTML='';
+  document.getElementById('searchStatus').textContent='';
+  hideFoodResult();
+  // Always start on Scan tab
+  switchTab('scan');
 }
 function closeScanner(){ document.getElementById('scannerModal').classList.remove('open'); stopQuagga(); hideFoodResult(); }
 function startQuagga(){
@@ -742,7 +933,7 @@ function startQuagga(){
     const code=result.codeResult.code; if(!code||code===lastCode) return;
     const err=result.codeResult.startInfo?result.codeResult.startInfo.error:1;
     if(err>0.3) return;
-    lastCode=code; setStatus(`📦 ${code}`,'found'); lookupBarcode(code);
+    lastCode=code; setStatus(`📦 ${code}`,'found','scanStatus'); lookupBarcode(code,'scanStatus');
   });
 }
 function stopQuagga(){ if(!scannerRunning) return; try{Quagga.offDetected();Quagga.stop();}catch(e){} scannerRunning=false; }
