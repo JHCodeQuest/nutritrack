@@ -583,6 +583,24 @@ function showToast(msg,err=false){
 document.getElementById('scannerModal').addEventListener('click',function(e){if(e.target===this)closeScanner();});
 document.getElementById('confirmOverlay').addEventListener('click',function(e){if(e.target===this)closeConfirm();});
 
+// ── THEME TOGGLE ─────────────────────────────────────────────────────────
+function toggleTheme() {
+  const isLight = document.documentElement.classList.toggle('light');
+  localStorage.setItem('nutritrack_theme', isLight ? 'light' : 'dark');
+  document.getElementById('themeToggle').setAttribute('aria-label', isLight ? 'Switch to dark mode' : 'Switch to light mode');
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', isLight ? '#f5f5f7' : '#0e0f11');
+}
+// Apply saved theme on load
+(function() {
+  const saved = localStorage.getItem('nutritrack_theme');
+  if (saved === 'light') {
+    document.documentElement.classList.add('light');
+    const btn = document.getElementById('themeToggle');
+    if (btn) btn.setAttribute('aria-label', 'Switch to dark mode');
+    document.querySelector('meta[name="theme-color"]').setAttribute('content', '#f5f5f7');
+  }
+})();
+
 // ── INIT ──────────────────────────────────────────────────────────────────
 // Show login screen immediately — firebase.js will call showApp() if already logged in
 showLoginScreen();

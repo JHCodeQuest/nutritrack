@@ -1,4 +1,5 @@
 :root{--bg:#0e0f11;--card:#181a1e;--card2:#1f2127;--border:#2a2d35;--green:#3ecf8e;--blue:#4a9eff;--orange:#ff7a45;--purple:#a78bfa;--red:#e05252;--text:#f0f0f0;--muted:#9ca3af}
+:root.light{--bg:#f5f5f7;--card:#ffffff;--card2:#eeeef0;--border:#d4d4d8;--green:#22a86a;--blue:#2d7fe0;--orange:#e06830;--purple:#8b6fd6;--red:#d03e3e;--text:#1a1a1e;--muted:#6b7280}
 *{box-sizing:border-box;margin:0;padding:0}
 *:focus{outline:none}
 *:focus-visible{outline:2px solid var(--green);outline-offset:2px;border-radius:4px}
@@ -222,3 +223,17 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .toast.err{background:var(--red);color:#fff}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px}
 @keyframes spin{to{transform:rotate(360deg)}}
+
+/* THEME TOGGLE */
+.theme-toggle{background:var(--card2);border:1px solid var(--border);border-radius:10px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);transition:all .2s}
+.theme-toggle:hover{color:var(--text);border-color:var(--green)}
+.theme-icon.sun{display:none}
+:root.light .theme-icon.moon{display:none}
+:root.light .theme-icon.sun{display:block}
+
+/* LIGHT MODE OVERRIDES */
+:root.light .google-btn{box-shadow:0 2px 12px rgba(0,0,0,.1)}
+:root.light .modal-overlay{background:rgba(0,0,0,.5)}
+:root.light .scanner-viewport{border-color:var(--border)}
+:root.light #ringCircle{stroke:var(--green)}
+:root.light circle[stroke="#1f2127"]{stroke:var(--border)}
