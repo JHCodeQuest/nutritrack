@@ -282,8 +282,17 @@
         <div class="fr-macro-chip"><div class="fmc-val" id="frProtein" style="color:var(--green)">—</div><div class="fmc-label">protein g</div></div>
         <div class="fr-macro-chip"><div class="fmc-val" id="frFat" style="color:var(--orange)">—</div><div class="fmc-label">fat g</div></div>
       </div>
+      <div class="fr-unit-row">
+        <label class="fr-unit-label">Based on</label>
+        <select class="fr-unit-select" id="frUnit" onchange="updateQtyPreview()">
+          <option value="serving">Per serving</option>
+          <option value="100g">Per 100g</option>
+          <option value="custom">Custom grams</option>
+        </select>
+        <input class="fr-gram-input" id="frGrams" type="number" min="1" placeholder="g" style="display:none" onchange="updateQtyPreview()" oninput="updateQtyPreview()"/>
+      </div>
       <div class="fr-qty-row">
-        <span class="fr-qty-label">Qty / Servings</span>
+        <span class="fr-qty-label" id="frQtyLabel">Servings</span>
         <div class="fr-qty-ctrl">
           <button class="fr-qty-btn" onclick="changeQty(-1)" aria-label="Decrease quantity">−</button>
           <input class="fr-qty-input" id="frQty" type="number" value="1" min="0.25" step="0.25" aria-label="Quantity" onchange="updateQtyPreview()"/>
