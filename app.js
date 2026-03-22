@@ -306,7 +306,7 @@ async function searchFood() {
     resultsEl.innerHTML = '';
     products.forEach((p, idx) => {
       const n = p.nutriments || {};
-      let kcal100 = n['energy-kcal_100g'] || (n['energy_100g'] ? n['energy_100g']/4.184 : 0);
+      let kcal100 = n['energy-kcal_100g'] != null ? n['energy-kcal_100g'] : (n['energy_100g'] ? n['energy_100g']/4.184 : 0);
       let factor = 1, servingLabel = 'per 100g';
       if (p.serving_size) {
         const m = p.serving_size.match(/([\d.]+)\s*g/i);
@@ -371,9 +371,9 @@ async function lookupBarcode(barcode, statusId) {
     const data = await res.json();
     if (!data || data.status===0 || !data.product) { setStatus('❌ Product not found','error',sid); lastCode=null; return; }
     const p=data.product, n=p.nutriments||{};
-    let kcal100 = n['energy-kcal_100g'] || (n['energy_100g']?n['energy_100g']/4.184:0);
+    let kcal100 = n['energy-kcal_100g'] != null ? n['energy-kcal_100g'] : (n['energy_100g']?n['energy_100g']/4.184:0);
     let factor=1, servingLabel='per 100g';
-    if (p.serving_size) { const m=p.serving_size.match(/([\d.]+)/); if(m){factor=parseFloat(m[1])/100;servingLabel=`per serving (${p.serving_size})`;} }
+    if (p.serving_size) { const m=p.serving_size.match(/([\d.]+)\s*g/i); if(m){factor=parseFloat(m[1])/100;servingLabel=`per serving (${p.serving_size})`;} }
     pendingFood = {
       name:    p.product_name||p.product_name_en||'Unknown Product',
       brand:   p.brands||'',
@@ -503,7 +503,7 @@ function showNoCameraNote(msg){ document.getElementById('cameraArea').innerHTML=
 // ── TRACKER CORE ──────────────────────────────────────────────────────────
 function estimateMacros(kcal){ return {carbs:Math.round(kcal*.5/4),protein:Math.round(kcal*.2/4),fat:Math.round(kcal*.3/9)}; }
 function totalKcal(){ return meals.reduce((s,m)=>s+m.items.reduce((ss,i)=>ss+i.kcal,0),0); }
-function totalMacros(){ const t={carbs:0,protein:0,fat:0}; meals.forEach(m=>m.items.forEach(i=>{t.carbs+=i.carbs;t.protein+=i.protein;t.fat+=i.fat;})); return t; }
+function totalMacros(){ const t={carbs:0,protein:0,fat:0}; meals.forEach(m=>m.items.forEach(i=>{t.carbs+=i.carbs;t.protein+=i.protein;t.fat+=i.fat;})); t.carbs=+t.carbs.toFixed(1);t.protein=+t.protein.toFixed(1);t.fat=+t.fat.toFixed(1); return t; }
 
 function updateSummary(){
   const consumed=totalKcal(), exercised=totalExerciseKcal();
@@ -607,7 +607,7 @@ async function inlineSearch(mealId){
     resultsEl.innerHTML='';
     products.forEach(p=>{
       const n=p.nutriments||{};
-      let kcal100=n['energy-kcal_100g']||(n['energy_100g']?n['energy_100g']/4.184:0);
+      let kcal100=n['energy-kcal_100g']!=null?n['energy-kcal_100g']:(n['energy_100g']?n['energy_100g']/4.184:0);
       let factor=1,servingLabel='per 100g';
       if(p.serving_size){const m=p.serving_size.match(/([\d.]+)\s*g/i);if(m){factor=parseFloat(m[1])/100;servingLabel=`per serving (${p.serving_size})`;}}
       const food={
@@ -921,11 +921,14 @@ function openGoalSettings() {
   }
   updateGoalPreview();
   releaseGoalTrap = trapFocus(modal.querySelector('.scanner-modal'), closeGoalSettings);
-  // Live preview on input change
-  modal.querySelectorAll('input,select').forEach(el => {
-    el.addEventListener('input', updateGoalPreview);
-    el.addEventListener('change', updateGoalPreview);
-  });
+  // Live preview on input change — use { once: false } but only bind once
+  if (!modal._goalListenersBound) {
+    modal.querySelectorAll('input,select').forEach(el => {
+      el.addEventListener('input', updateGoalPreview);
+      el.addEventListener('change', updateGoalPreview);
+    });
+    modal._goalListenersBound = true;
+  }
 }
 
 function closeGoalSettings() {
