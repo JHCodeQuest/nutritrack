@@ -5,142 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NutriTrack – Calorie Tracker</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
-
-<!-- Firebase SDKs loaded from CDN — no npm needed for plain HTML files -->
-<script type="module">
-// ── FIREBASE SETUP ───────────────────────────────────────────────────────
-// We import Firebase tools directly from Google's CDN
-import { initializeApp }                          from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
-                                                  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, onSnapshot }
-                                                  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-// Your Firebase project config — these are safe to be in frontend code
-const firebaseConfig = {
-  apiKey:            "AIzaSyAvEEu5fVhw-53xddvP7Weh3uo7THwMPN4",
-  authDomain:        "nutritrack-5fc63.firebaseapp.com",
-  projectId:         "nutritrack-5fc63",
-  storageBucket:     "nutritrack-5fc63.firebasestorage.app",
-  messagingSenderId: "201676177627",
-  appId:             "1:201676177627:web:857b03681e244bedbf0cfe"
-};
-
-// Initialise Firebase — think of this like "connecting to the database"
-const firebaseApp = initializeApp(firebaseConfig);
-const auth        = getAuth(firebaseApp);       // handles login/logout
-const db          = getFirestore(firebaseApp);  // the cloud database
-
-// ── AUTH STATE ───────────────────────────────────────────────────────────
-// This function runs automatically whenever the login state changes
-// e.g. when user signs in, signs out, or reopens the app
-onAuthStateChanged(auth, (user) => {
-  if (user) {
-    // User is signed in
-    showApp(user);
-    subscribeToFirestore(user.uid);  // start listening for their cloud data
-  } else {
-    // User is signed out
-    showLoginScreen();
-    unsubscribeFirestore();
-  }
-});
-
-// Sign in with Google popup
-window.signInWithGoogle = async function() {
-  const provider = new GoogleAuthProvider();
-  try {
-    await signInWithPopup(auth, provider);
-    // onAuthStateChanged above will fire automatically after this
-  } catch(e) {
-    if (e.code !== 'auth/popup-closed-by-user') {
-      showToast('Sign-in failed: ' + e.message, true);
-    }
-  }
-};
-
-// Sign out
-window.signOutUser = async function() {
-  await signOut(auth);
-  // onAuthStateChanged will fire and show login screen
-};
-
-// ── FIRESTORE SYNC ───────────────────────────────────────────────────────
-// Firestore path: users/{userId}/logs/{dateKey}
-// e.g. users/abc123/logs/2026-03-21
-let firestoreUnsub = null;  // holds the "stop listening" function
-
-function subscribeToFirestore(uid) {
-  // Listen in real-time to today's document in Firestore
-  // onSnapshot fires immediately with current data, then again on any change
-  const docRef = doc(db, 'users', uid, 'logs', currentDateKey);
-  firestoreUnsub = onSnapshot(docRef, (snap) => {
-    if (snap.exists()) {
-      const cloudData = snap.data();
-      // Load cloud data into meals array
-      meals.forEach(meal => {
-        meal.items = cloudData[meal.id] || [];
-      });
-    } else {
-      // No cloud data for this day — try loading from localStorage fallback
-      loadFromLocalStorage();
-    }
-    renderMeals();
-    updateSummary();
-    markSaved();
-  }, (err) => {
-    console.warn('Firestore error, falling back to localStorage:', err);
-    loadFromLocalStorage();
-    renderMeals();
-    updateSummary();
-  });
-}
-
-function unsubscribeFirestore() {
-  if (firestoreUnsub) { firestoreUnsub(); firestoreUnsub = null; }
-  meals.forEach(m => m.items = []);
-  renderMeals();
-  updateSummary();
-}
-
-// Save current day's meals to Firestore
-// We wrap it in a try/catch so if offline it falls back to localStorage
-window.saveToCloud = async function() {
-  const user = auth.currentUser;
-  if (!user) { saveToLocalStorage(); return; }
-
-  const snapshot = {};
-  meals.forEach(m => { snapshot[m.id] = m.items; });
-
-  try {
-    // setDoc writes (or overwrites) the document at this path
-    await setDoc(
-      doc(db, 'users', user.uid, 'logs', currentDateKey),
-      snapshot
-    );
-    saveToLocalStorage(); // also save locally as offline backup
-    markSaved();
-  } catch(e) {
-    console.warn('Cloud save failed, saved locally:', e);
-    saveToLocalStorage();
-    markSaved();
-    showToast('Saved locally (offline mode)', false);
-  }
-};
-
-// Re-subscribe when user changes day
-window.resubscribeForDate = function() {
-  const user = auth.currentUser;
-  if (!user) return;
-  unsubscribeFirestore();
-  subscribeToFirestore(user.uid);
-};
-
-// Make db and auth accessible to non-module scripts
-window._firebaseAuth = auth;
-window._firebaseDb   = db;
-</script>
+<script type="module" src="firebase.js"></script>
 </head>
 <body>
 
@@ -149,7 +16,7 @@ window._firebaseDb   = db;
   <div class="login-wrap">
     <div class="login-logo">🥗</div>
     <div class="login-title">NutriTrack</div>
-    <div class="login-sub">Your personal calorie & nutrition tracker</div>
+    <div class="login-sub">Your personal calorie &amp; nutrition tracker</div>
     <button class="google-btn" onclick="signInWithGoogle()">
       <svg width="18" height="18" viewBox="0 0 48 48" style="flex-shrink:0">
         <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
@@ -167,17 +34,17 @@ window._firebaseDb   = db;
 <!-- ── MAIN APP ──────────────────────────────────────────────────────── -->
 <div id="mainApp" style="display:none">
 
-  <div class="header">
+  <header class="header">
     <div>
       <div class="header-title">NutriTrack</div>
     </div>
     <div style="display:flex;align-items:center;gap:10px">
       <div class="goal-badge">Goal: 2201 kcal</div>
-      <div class="avatar-wrap" id="avatarWrap">
-        <img id="userAvatar" src="" alt="" class="avatar" onclick="toggleUserMenu()"/>
-      </div>
+      <button class="avatar-btn" id="avatarBtn" aria-label="Open user menu" aria-expanded="false" onclick="toggleUserMenu()">
+        <img id="userAvatar" src="" alt="" class="avatar"/>
+      </button>
     </div>
-  </div>
+  </header>
 
   <!-- USER MENU DROPDOWN -->
   <div class="user-menu" id="userMenu">
@@ -188,12 +55,12 @@ window._firebaseDb   = db;
   </div>
 
   <!-- DATE NAVIGATION -->
-  <div class="date-nav">
-    <button class="date-nav-btn" onclick="changeDay(-1)">◀</button>
-    <div class="date-nav-label" id="dateNavLabel"></div>
-    <button class="date-nav-btn" id="fwdBtn" onclick="changeDay(1)">▶</button>
+  <nav class="date-nav" aria-label="Date navigation">
+    <button class="date-nav-btn" onclick="changeDay(-1)" aria-label="Previous day">◀</button>
+    <div class="date-nav-label" id="dateNavLabel" aria-live="polite"></div>
+    <button class="date-nav-btn" id="fwdBtn" onclick="changeDay(1)" aria-label="Next day">▶</button>
     <button class="date-nav-today" onclick="goToday()">Today</button>
-  </div>
+  </nav>
 
   <!-- PERSISTENCE TOOLBAR -->
   <div class="persist-bar">
@@ -208,10 +75,11 @@ window._firebaseDb   = db;
     </div>
   </div>
 
+  <main id="mainContent">
   <!-- CALORIE RING -->
   <div class="ring-card">
     <div class="ring-wrap">
-      <svg width="116" height="116" viewBox="0 0 116 116">
+      <svg id="caloriRing" width="116" height="116" viewBox="0 0 116 116" role="img" aria-label="Calorie progress: 2201 of 2201 remaining">
         <circle cx="58" cy="58" r="48" fill="none" stroke="#1f2127" stroke-width="11"/>
         <circle id="ringCircle" cx="58" cy="58" r="48" fill="none" stroke="#3ecf8e" stroke-width="11"
           stroke-dasharray="301" stroke-dashoffset="301" stroke-linecap="round"
@@ -260,24 +128,25 @@ window._firebaseDb   = db;
     </div>
   </div>
 
+  </main>
 </div><!-- /mainApp -->
 
 <!-- SCANNER MODAL -->
-<div class="modal-overlay" id="scannerModal">
-  <div class="scanner-modal">
-    <button class="close-btn" onclick="closeScanner()">✕</button>
+<div class="modal-overlay" id="scannerModal" aria-hidden="true">
+  <div class="scanner-modal" role="dialog" aria-modal="true" aria-labelledby="scannerModalTitle">
+    <button class="close-btn" onclick="closeScanner()" aria-label="Close">✕</button>
     <div class="modal-handle"></div>
-    <div class="modal-title">Add Food</div>
+    <div class="modal-title" id="scannerModalTitle">Add Food</div>
 
     <!-- TABS -->
-    <div class="modal-tabs">
-      <button class="modal-tab active" id="tabScan"   onclick="switchTab('scan')">📷 Scan</button>
-      <button class="modal-tab"        id="tabSearch" onclick="switchTab('search')">🔍 Search</button>
-      <button class="modal-tab"        id="tabBarcode" onclick="switchTab('barcode')">🔢 Barcode</button>
+    <div class="modal-tabs" role="tablist" aria-label="Add food method">
+      <button class="modal-tab active" id="tabScan"    role="tab" aria-selected="true"  aria-controls="paneScan"    onclick="switchTab('scan')">📷 Scan</button>
+      <button class="modal-tab"        id="tabSearch"  role="tab" aria-selected="false" aria-controls="paneSearch"  onclick="switchTab('search')" tabindex="-1">🔍 Search</button>
+      <button class="modal-tab"        id="tabBarcode" role="tab" aria-selected="false" aria-controls="paneBarcode" onclick="switchTab('barcode')" tabindex="-1">🔢 Barcode</button>
     </div>
 
     <!-- TAB: SCAN -->
-    <div id="paneScan">
+    <div id="paneScan" role="tabpanel" aria-labelledby="tabScan" tabindex="0">
       <div class="modal-sub">Point camera at any food barcode — EAN, UPC supported.</div>
       <div id="cameraArea">
         <div class="scanner-viewport">
@@ -291,11 +160,11 @@ window._firebaseDb   = db;
     </div>
 
     <!-- TAB: SEARCH -->
-    <div id="paneSearch" style="display:none">
+    <div id="paneSearch" role="tabpanel" aria-labelledby="tabSearch" tabindex="0" style="display:none">
       <div class="modal-sub">Search by food name — powered by Open Food Facts (3M+ products).</div>
       <div class="search-row">
         <input class="search-input" id="foodSearchInput" type="text" placeholder="e.g. banana, chicken breast, oat milk…"
-          onkeydown="if(event.key==='Enter')searchFood()"/>
+          aria-label="Search for a food" onkeydown="if(event.key==='Enter')searchFood()"/>
         <button class="lookup-btn" onclick="searchFood()">Search</button>
       </div>
       <div class="search-status" id="searchStatus"></div>
@@ -303,11 +172,11 @@ window._firebaseDb   = db;
     </div>
 
     <!-- TAB: BARCODE -->
-    <div id="paneBarcode" style="display:none">
+    <div id="paneBarcode" role="tabpanel" aria-labelledby="tabBarcode" tabindex="0" style="display:none">
       <div class="modal-sub">Enter a barcode number manually to look up a product.</div>
       <div class="manual-barcode-row">
         <input class="barcode-text-input" id="manualBarcode" type="number" placeholder="e.g. 5000112546415"
-          onkeydown="if(event.key==='Enter')lookupManual()"/>
+          aria-label="Barcode number" onkeydown="if(event.key==='Enter')lookupManual()"/>
         <button class="lookup-btn" onclick="lookupManual()">Look up</button>
       </div>
       <div class="scan-status" id="barcodeStatus"></div>
@@ -338,12 +207,12 @@ window._firebaseDb   = db;
 </div>
 
 <!-- CONFIRM MODAL -->
-<div class="confirm-overlay" id="confirmOverlay">
-  <div class="confirm-box">
-    <h3>🗑 Clear Today's Log?</h3>
+<div class="confirm-overlay" id="confirmOverlay" aria-hidden="true">
+  <div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <h3 id="confirmTitle">🗑 Clear Today's Log?</h3>
     <p>This will delete all food entries for the current day from the cloud and locally.</p>
     <div class="confirm-actions">
-      <button class="confirm-cancel" onclick="document.getElementById('confirmOverlay').classList.remove('open')">Cancel</button>
+      <button class="confirm-cancel" onclick="closeConfirm()">Cancel</button>
       <button class="confirm-ok" onclick="clearDay()">Clear</button>
     </div>
   </div>
@@ -351,686 +220,6 @@ window._firebaseDb   = db;
 
 <div class="toast" id="toast"></div>
 
-<style>
-:root{--bg:#0e0f11;--card:#181a1e;--card2:#1f2127;--border:#2a2d35;--green:#3ecf8e;--blue:#4a9eff;--orange:#ff7a45;--purple:#a78bfa;--red:#e05252;--text:#f0f0f0;--muted:#6b7280}
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;padding:0 0 100px}
-
-/* LOGIN */
-.login-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;text-align:center}
-.login-logo{font-size:64px;margin-bottom:16px}
-.login-title{font-family:'Syne',sans-serif;font-size:34px;font-weight:800;margin-bottom:8px}
-.login-sub{font-size:14px;color:var(--muted);margin-bottom:40px;line-height:1.6;max-width:280px}
-.google-btn{display:flex;align-items:center;gap:12px;background:#fff;color:#1f1f1f;border:none;border-radius:14px;padding:14px 24px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:opacity .2s;box-shadow:0 2px 12px rgba(0,0,0,.3)}
-.google-btn:hover{opacity:.9}
-.login-note{font-size:12px;color:var(--muted);margin-top:20px;max-width:240px;line-height:1.6}
-
-/* HEADER */
-.header{padding:24px 20px 10px;display:flex;justify-content:space-between;align-items:center}
-.header-title{font-family:'Syne',sans-serif;font-size:26px;font-weight:800}
-.goal-badge{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:6px 12px;font-size:12px;color:var(--green);font-weight:600}
-.avatar{width:36px;height:36px;border-radius:50%;border:2px solid var(--border);cursor:pointer;object-fit:cover;transition:border-color .2s}
-.avatar:hover{border-color:var(--green)}
-
-/* USER MENU */
-.user-menu{display:none;position:absolute;top:70px;right:14px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;min-width:200px;z-index:500;box-shadow:0 8px 32px rgba(0,0,0,.5)}
-.user-menu.open{display:block}
-.um-name{font-weight:600;font-size:14px;margin-bottom:2px}
-.um-email{font-size:12px;color:var(--muted);margin-bottom:12px}
-.um-divider{height:1px;background:var(--border);margin-bottom:12px}
-.um-btn{width:100%;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:9px;color:var(--red);font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:opacity .2s}
-.um-btn:hover{opacity:.8}
-
-/* DATE NAV */
-.date-nav{margin:0 14px 8px;display:flex;align-items:center;gap:8px;position:relative}
-.date-nav-btn{background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:5px 10px;color:var(--muted);font-size:13px;cursor:pointer;transition:all .2s}
-.date-nav-btn:hover{color:var(--text);border-color:var(--green)}
-.date-nav-label{flex:1;text-align:center;font-size:13px;font-weight:600}
-.date-nav-today{background:var(--green);color:#0e0f11;border:none;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif}
-
-/* PERSIST BAR */
-.persist-bar{margin:0 14px 14px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:11px 15px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
-.persist-left{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
-.save-indicator{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;transition:background .3s}
-.save-indicator.dirty{background:var(--orange);animation:pulse 1s ease-in-out infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-.persist-right{display:flex;gap:7px}
-.pb-btn{background:var(--card2);border:1px solid var(--border);border-radius:9px;padding:6px 11px;color:var(--text);font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s;display:flex;align-items:center;gap:5px;white-space:nowrap}
-.pb-btn:hover{border-color:var(--green);color:var(--green)}
-.pb-btn.danger:hover{border-color:var(--red);color:var(--red)}
-
-/* RING */
-.ring-card{margin:0 14px 14px;background:var(--card);border:1px solid var(--border);border-radius:24px;padding:22px;display:flex;align-items:center;gap:22px}
-.ring-wrap{position:relative;width:116px;height:116px;flex-shrink:0}
-.ring-wrap svg{transform:rotate(-90deg)}
-.ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.ring-num{font-family:'Syne',sans-serif;font-size:21px;font-weight:800;color:var(--green)}
-.ring-label{font-size:10px;color:var(--muted);margin-top:1px}
-.ring-stats{flex:1;display:flex;flex-direction:column;gap:10px}
-.stat-row{display:flex;align-items:center;gap:10px}
-.stat-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.stat-name{font-size:11px;color:var(--muted)}
-.stat-val{font-size:15px;font-weight:600}
-
-/* MACROS */
-.macro-card{margin:0 14px 14px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:16px 18px}
-.macro-title{font-size:11px;color:var(--muted);margin-bottom:11px;text-transform:uppercase;letter-spacing:.08em}
-.macro-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
-.macro-name{font-size:12px;width:54px;color:var(--muted)}
-.macro-bar-bg{flex:1;height:6px;background:var(--card2);border-radius:99px;overflow:hidden}
-.macro-bar-fill{height:100%;border-radius:99px;transition:width .6s cubic-bezier(.4,0,.2,1)}
-.macro-val{font-size:12px;font-weight:600;width:44px;text-align:right}
-
-/* SECTION */
-.section-hdr{padding:6px 20px 10px;display:flex;justify-content:space-between;align-items:center}
-.section-hdr h2{font-family:'Syne',sans-serif;font-size:17px;font-weight:700}
-.meals{display:flex;flex-direction:column;gap:11px;padding:0 14px}
-.meal-card{background:var(--card);border:1px solid var(--border);border-radius:20px;overflow:hidden}
-.meal-header{display:flex;align-items:center;justify-content:space-between;padding:15px 17px;cursor:pointer;user-select:none}
-.meal-left{display:flex;align-items:center;gap:11px}
-.meal-icon{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px}
-.meal-name{font-weight:600;font-size:14px}
-.meal-sub{font-size:11px;color:var(--muted);margin-top:1px}
-.meal-right{display:flex;align-items:center;gap:10px}
-.meal-kcal{font-family:'Syne',sans-serif;font-size:16px;font-weight:700}
-.meal-chevron{color:var(--muted);font-size:11px;transition:transform .3s}
-.meal-chevron.open{transform:rotate(180deg)}
-.food-log{display:none;padding:0 17px 14px}
-.food-log.open{display:block}
-.food-item{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-top:1px solid var(--border)}
-.food-name{font-size:13px;font-weight:500}
-.food-details{font-size:11px;color:var(--muted);margin-top:2px}
-.food-right{display:flex;align-items:center;gap:8px}
-.food-kcal{font-size:13px;font-weight:600}
-.del-btn{background:none;border:none;color:var(--red);cursor:pointer;font-size:13px;opacity:.6;padding:2px 5px;transition:opacity .2s}
-.del-btn:hover{opacity:1}
-.add-food-row{display:flex;gap:7px;margin-top:11px;border-top:1px solid var(--border);padding-top:12px;flex-wrap:wrap}
-.food-input{flex:1;min-width:100px;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:8px 11px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none}
-.food-input:focus{border-color:var(--green)}
-.food-input::placeholder{color:var(--muted)}
-.kcal-input{width:66px;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:8px 9px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;text-align:center}
-.kcal-input:focus{border-color:var(--green)}
-.kcal-input::placeholder{color:var(--muted)}
-.log-btn{background:var(--green);border:none;border-radius:10px;padding:8px 13px;color:#0e0f11;font-weight:700;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif}
-.log-btn:hover{opacity:.85}
-.scan-btn{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:8px 11px;color:var(--text);cursor:pointer;display:flex;align-items:center;gap:5px;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:600;transition:all .2s}
-.scan-btn:hover{border-color:var(--green);color:var(--green)}
-
-/* GOAL + EXERCISE */
-.goal-card{margin:12px 14px 0;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:17px 18px}
-.goal-card h3{font-family:'Syne',sans-serif;font-size:15px;margin-bottom:13px}
-.goal-row{display:flex;justify-content:space-between;gap:8px}
-.goal-item{flex:1;background:var(--card2);border-radius:13px;padding:11px 12px;text-align:center}
-.gi-val{font-family:'Syne',sans-serif;font-size:19px;font-weight:800}
-.gi-label{font-size:10px;color:var(--muted);margin-top:2px}
-.ex-card{margin:12px 14px 0;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:17px 18px}
-.ex-card h3{font-family:'Syne',sans-serif;font-size:15px;margin-bottom:12px}
-.ex-chips{display:flex;gap:8px;flex-wrap:wrap}
-.ex-chip{display:flex;align-items:center;gap:6px;background:var(--card2);border:1px solid var(--border);border-radius:50px;padding:6px 13px;font-size:12px;font-weight:500}
-.ex-dot{width:7px;height:7px;border-radius:50%}
-
-/* MODAL TABS */
-.modal-tabs{display:flex;gap:6px;margin-bottom:18px}
-.modal-tab{flex:1;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:9px 6px;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s}
-.modal-tab.active{background:var(--green);border-color:var(--green);color:#0e0f11}
-.modal-tab:hover:not(.active){color:var(--text);border-color:var(--green)}
-
-/* SEARCH */
-.search-row{display:flex;gap:8px;margin-bottom:12px}
-.search-input{flex:1;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:10px 13px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none}
-.search-input:focus{border-color:var(--green)}
-.search-input::placeholder{color:var(--muted)}
-.search-status{text-align:center;font-size:13px;color:var(--muted);min-height:20px;margin-bottom:8px}
-.search-status.error{color:var(--red)}
-.search-results{display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto;padding-right:2px}
-.search-results::-webkit-scrollbar{width:4px}
-.search-results::-webkit-scrollbar-track{background:var(--card2);border-radius:99px}
-.search-results::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
-.search-result-item{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;cursor:pointer;transition:border-color .2s;display:flex;align-items:center;justify-content:space-between;gap:10px}
-.search-result-item:hover{border-color:var(--green)}
-.sri-left{flex:1;min-width:0}
-.sri-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sri-brand{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sri-right{display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0;gap:2px}
-.sri-kcal{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--green)}
-.sri-macros{font-size:10px;color:var(--muted);white-space:nowrap}
-.sri-select-btn{background:var(--green);border:none;border-radius:8px;padding:5px 10px;color:#0e0f11;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:4px}
-.no-results{text-align:center;padding:20px;color:var(--muted);font-size:13px}
-
-/* SCANNER MODAL */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:1000;align-items:flex-end;justify-content:center}
-.modal-overlay.open{display:flex}
-.scanner-modal{background:var(--card);border:1px solid var(--border);border-radius:28px 28px 0 0;width:100%;max-width:480px;padding:24px 20px 40px;position:relative;animation:slideUp .3s ease;max-height:92vh;overflow-y:auto}
-@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
-.modal-handle{width:40px;height:4px;background:var(--border);border-radius:99px;margin:0 auto 20px}
-.modal-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:5px}
-.modal-sub{font-size:12px;color:var(--muted);margin-bottom:18px;line-height:1.5}
-.close-btn{position:absolute;top:18px;right:18px;background:var(--card2);border:1px solid var(--border);border-radius:50%;width:32px;height:32px;color:var(--muted);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;z-index:10}
-.scanner-viewport{width:100%;height:230px;border-radius:18px;overflow:hidden;background:#000;position:relative;border:2px solid var(--border)}
-#interactive{width:100%;height:100%}
-#interactive video{width:100%!important;height:100%!important;object-fit:cover}
-#interactive canvas.drawingBuffer{display:none}
-.scan-line{position:absolute;left:16px;right:16px;top:50%;height:2px;background:var(--green);box-shadow:0 0 10px var(--green);animation:scanAnim 2s ease-in-out infinite;z-index:10;pointer-events:none}
-@keyframes scanAnim{0%,100%{top:28%}50%{top:72%}}
-.scan-corner{position:absolute;width:26px;height:26px;border-color:var(--green);border-style:solid;z-index:10}
-.sc-tl{top:10px;left:10px;border-width:3px 0 0 3px;border-radius:4px 0 0 0}
-.sc-tr{top:10px;right:10px;border-width:3px 3px 0 0;border-radius:0 4px 0 0}
-.sc-bl{bottom:10px;left:10px;border-width:0 0 3px 3px;border-radius:0 0 0 4px}
-.sc-br{bottom:10px;right:10px;border-width:0 3px 3px 0;border-radius:0 0 4px 0}
-.scan-status{text-align:center;margin-top:12px;font-size:13px;color:var(--muted);min-height:22px}
-.scan-status.found{color:var(--green);font-weight:600}
-.scan-status.error{color:var(--red)}
-.manual-barcode-row{display:flex;gap:8px;margin-top:14px}
-.barcode-text-input{flex:1;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:10px 13px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none}
-.barcode-text-input:focus{border-color:var(--blue)}
-.barcode-text-input::placeholder{color:var(--muted)}
-.lookup-btn{background:var(--blue);border:none;border-radius:10px;padding:10px 16px;color:#fff;font-weight:700;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif}
-.food-result{display:none;margin-top:16px;background:var(--card2);border:1px solid var(--border);border-radius:16px;padding:16px}
-.food-result.show{display:block}
-.fr-name{font-size:15px;font-weight:600;margin-bottom:3px}
-.fr-brand{font-size:12px;color:var(--muted);margin-bottom:4px}
-.fr-serving{font-size:11px;color:var(--muted);margin-bottom:12px}
-.fr-macros{display:flex;gap:7px;margin-bottom:13px;flex-wrap:wrap}
-.fr-macro-chip{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 10px;text-align:center;flex:1;min-width:58px}
-.fmc-val{font-family:'Syne',sans-serif;font-size:17px;font-weight:700}
-.fmc-label{font-size:10px;color:var(--muted);margin-top:2px}
-.fr-actions{display:flex;gap:8px}
-.fr-meal-select{flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px 11px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;cursor:pointer}
-.fr-add-btn{background:var(--green);border:none;border-radius:10px;padding:9px 18px;color:#0e0f11;font-weight:700;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif}
-.no-camera-note{background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:16px;text-align:center;font-size:13px;color:var(--muted);line-height:1.6}
-.no-camera-note strong{color:var(--text);display:block;margin-bottom:4px}
-
-/* CONFIRM */
-.confirm-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:2000;align-items:center;justify-content:center;padding:20px}
-.confirm-overlay.open{display:flex}
-.confirm-box{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:24px;max-width:320px;width:100%;text-align:center}
-.confirm-box h3{font-family:'Syne',sans-serif;font-size:17px;margin-bottom:10px}
-.confirm-box p{font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.5}
-.confirm-actions{display:flex;gap:10px}
-.confirm-cancel{flex:1;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:10px;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
-.confirm-ok{flex:1;background:var(--red);border:none;border-radius:10px;padding:10px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif}
-
-/* TOAST */
-.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--green);color:#0e0f11;padding:10px 22px;border-radius:50px;font-size:13px;font-weight:700;opacity:0;transition:all .3s;z-index:3000;pointer-events:none;white-space:nowrap}
-.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-.toast.err{background:var(--red);color:#fff}
-.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px}
-@keyframes spin{to{transform:rotate(360deg)}}
-</style>
-
-<script>
-// ── APP STATE ────────────────────────────────────────────────────────────
-const GOAL = 2201;
-const MACRO_GOALS = { carbs:220, protein:140, fat:73 };
-const LS_KEY = 'nutritrack_v1';  // localStorage fallback key
-
-const meals = [
-  { id:'breakfast', name:'Breakfast', icon:'☀️', color:'#f59e0b', items:[] },
-  { id:'lunch',     name:'Lunch',     icon:'🥗', color:'#3ecf8e', items:[] },
-  { id:'dinner',    name:'Dinner',    icon:'🍽️', color:'#4a9eff', items:[] },
-  { id:'snacks',    name:'Snacks',    icon:'🍎', color:'#a78bfa', items:[] },
-];
-
-let currentDateKey = todayKey();
-let dayOffset = 0;
-let saveTimer = null;
-let currentScanMealId = null;
-let pendingFood = null;
-let scannerRunning = false;
-let lastCode = null;
-
-// ── DATE HELPERS ─────────────────────────────────────────────────────────
-function todayKey() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function dateKeyFromOffset(offset) {
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function friendlyDate(key) {
-  const [y,m,d] = key.split('-').map(Number);
-  const date = new Date(y,m-1,d);
-  if (key === todayKey())              return 'Today · ' + date.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
-  if (key === dateKeyFromOffset(-1))  return 'Yesterday · ' + date.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
-  return date.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-}
-
-// ── UI: SHOW / HIDE SCREENS ───────────────────────────────────────────────
-function showLoginScreen() {
-  document.getElementById('loginScreen').style.display = 'block';
-  document.getElementById('mainApp').style.display     = 'none';
-}
-function showApp(user) {
-  document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('mainApp').style.display     = 'block';
-  // Show user avatar and name in header
-  const img = document.getElementById('userAvatar');
-  img.src = user.photoURL || '';
-  img.style.display = user.photoURL ? 'block' : 'none';
-  document.getElementById('umName').textContent  = user.displayName || 'User';
-  document.getElementById('umEmail').textContent = user.email || '';
-  // Init date nav
-  currentDateKey = todayKey();
-  dayOffset = 0;
-  updateDateNav();
-}
-
-function toggleUserMenu() {
-  document.getElementById('userMenu').classList.toggle('open');
-}
-// Close user menu when clicking elsewhere
-document.addEventListener('click', function(e) {
-  const menu = document.getElementById('userMenu');
-  const avatar = document.getElementById('userAvatar');
-  if (menu && !menu.contains(e.target) && e.target !== avatar) {
-    menu.classList.remove('open');
-  }
-});
-
-// ── DATE NAVIGATION ───────────────────────────────────────────────────────
-function changeDay(delta) {
-  dayOffset += delta;
-  if (dayOffset > 0) dayOffset = 0;
-  currentDateKey = dateKeyFromOffset(dayOffset);
-  meals.forEach(m => m.items = []);
-  updateDateNav();
-  renderMeals();
-  updateSummary();
-  markSaving();
-  // Re-subscribe Firestore for new date
-  if (window.resubscribeForDate) window.resubscribeForDate();
-}
-function goToday() {
-  dayOffset = 0;
-  currentDateKey = todayKey();
-  meals.forEach(m => m.items = []);
-  updateDateNav();
-  renderMeals();
-  updateSummary();
-  if (window.resubscribeForDate) window.resubscribeForDate();
-}
-function updateDateNav() {
-  const lbl = document.getElementById('dateNavLabel');
-  if (lbl) lbl.textContent = friendlyDate(currentDateKey);
-  const fwd = document.getElementById('fwdBtn');
-  if (fwd) { fwd.style.opacity = dayOffset===0?'0.3':'1'; fwd.style.pointerEvents = dayOffset===0?'none':'auto'; }
-}
-
-// ── LOCALSTORAGE FALLBACK ─────────────────────────────────────────────────
-function loadFromLocalStorage() {
-  try {
-    const all = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
-    const day = all[currentDateKey] || {};
-    meals.forEach(m => { m.items = day[m.id] || []; });
-  } catch(e) { meals.forEach(m => m.items = []); }
-}
-function saveToLocalStorage() {
-  try {
-    const all = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
-    const snap = {};
-    meals.forEach(m => { snap[m.id] = m.items; });
-    all[currentDateKey] = snap;
-    localStorage.setItem(LS_KEY, JSON.stringify(all));
-  } catch(e) {}
-}
-
-// ── SAVE ORCHESTRATION ────────────────────────────────────────────────────
-function scheduleSave() {
-  markSaving();
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    if (window.saveToCloud) window.saveToCloud();
-    else { saveToLocalStorage(); markSaved(); }
-  }, 800);
-}
-function markSaving() {
-  const ind = document.getElementById('saveIndicator');
-  const lbl = document.getElementById('saveLabel');
-  if (ind) ind.classList.add('dirty');
-  if (lbl) lbl.textContent = 'Saving…';
-}
-function markSaved() {
-  const ind = document.getElementById('saveIndicator');
-  const lbl = document.getElementById('saveLabel');
-  if (ind) ind.classList.remove('dirty');
-  if (lbl) lbl.textContent = '☁️ Synced';
-}
-
-// ── EXPORT / IMPORT ───────────────────────────────────────────────────────
-function exportData() {
-  saveToLocalStorage();
-  const all = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
-  const blob = new Blob([JSON.stringify(all,null,2)],{type:'application/json'});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = `nutritrack-${todayKey()}.json`; a.click();
-  URL.revokeObjectURL(url);
-  showToast('📥 Exported!');
-}
-function importData(e) {
-  const file = e.target.files[0]; if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(ev) {
-    try {
-      const imp = JSON.parse(ev.target.result);
-      if (typeof imp !== 'object' || Array.isArray(imp)) throw new Error();
-      const existing = JSON.parse(localStorage.getItem(LS_KEY)||'{}');
-      localStorage.setItem(LS_KEY, JSON.stringify({...existing,...imp}));
-      loadFromLocalStorage(); renderMeals(); updateSummary();
-      showToast('✅ Imported!');
-    } catch{ showToast('❌ Import failed',true); }
-  };
-  reader.readAsText(file);
-  e.target.value='';
-}
-
-// ── CLEAR DAY ─────────────────────────────────────────────────────────────
-function confirmClear() { document.getElementById('confirmOverlay').classList.add('open'); }
-function clearDay() {
-  document.getElementById('confirmOverlay').classList.remove('open');
-  meals.forEach(m => m.items=[]);
-  scheduleSave();
-  renderMeals(); updateSummary();
-  showToast('🗑 Day cleared');
-}
-
-// ── TAB SWITCHING ─────────────────────────────────────────────────────────
-function switchTab(tab) {
-  // Update tab button styles
-  ['scan','search','barcode'].forEach(t => {
-    document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('active', t===tab);
-    document.getElementById('pane'+t.charAt(0).toUpperCase()+t.slice(1)).style.display = t===tab ? 'block' : 'none';
-  });
-  hideFoodResult();
-  // Start/stop camera depending on active tab
-  if (tab === 'scan') {
-    setTimeout(startQuagga, 200);
-  } else {
-    stopQuagga();
-  }
-  // Focus search input when switching to search
-  if (tab === 'search') {
-    setTimeout(() => document.getElementById('foodSearchInput').focus(), 100);
-  }
-}
-
-// ── FOOD NAME SEARCH (Open Food Facts search API) ─────────────────────────
-async function searchFood() {
-  const query = document.getElementById('foodSearchInput').value.trim();
-  if (!query) return;
-
-  const statusEl  = document.getElementById('searchStatus');
-  const resultsEl = document.getElementById('searchResults');
-  statusEl.innerHTML = '<span class="spinner"></span>Searching…';
-  statusEl.className = 'search-status';
-  resultsEl.innerHTML = '';
-  hideFoodResult();
-
-  try {
-    // Open Food Facts search endpoint — searches product name, returns up to 20 results
-    // We filter to products that have nutrition data (energy > 0)
-    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=20&fields=product_name,brands,nutriments,serving_size,image_thumb_url`;
-    const res  = await fetch(url);
-    const data = await res.json();
-
-    const products = (data.products || []).filter(p =>
-      p.product_name &&
-      p.nutriments &&
-      (p.nutriments['energy-kcal_100g'] || p.nutriments['energy_100g'])
-    );
-
-    if (products.length === 0) {
-      statusEl.textContent = '😕 No results found — try different keywords';
-      statusEl.className = 'search-status error';
-      return;
-    }
-
-    statusEl.textContent = `${products.length} result${products.length!==1?'s':''} found`;
-    statusEl.className = 'search-status';
-
-    resultsEl.innerHTML = '';
-    products.forEach((p, idx) => {
-      const n = p.nutriments || {};
-      let kcal100 = n['energy-kcal_100g'] || (n['energy_100g'] ? n['energy_100g']/4.184 : 0);
-      let factor = 1, servingLabel = 'per 100g';
-      if (p.serving_size) {
-        const m = p.serving_size.match(/([\d.]+)/);
-        if (m) { factor = parseFloat(m[1])/100; servingLabel = `per serving (${p.serving_size})`; }
-      }
-      const kcal    = Math.round(kcal100 * factor);
-      const carbs   = +((n['carbohydrates_100g']||0)*factor).toFixed(1);
-      const protein = +((n['proteins_100g']||0)*factor).toFixed(1);
-      const fat     = +((n['fat_100g']||0)*factor).toFixed(1);
-      const name    = p.product_name || 'Unknown';
-      const brand   = p.brands || '';
-
-      // Build a food object and store it on the element via data attribute
-      const foodObj = JSON.stringify({ name, brand, kcal, carbs, protein, fat, servingLabel });
-
-      const item = document.createElement('div');
-      item.className = 'search-result-item';
-      item.innerHTML = `
-        <div class="sri-left">
-          <div class="sri-name">${escHtml(name)}</div>
-          ${brand ? `<div class="sri-brand">${escHtml(brand)}</div>` : ''}
-        </div>
-        <div class="sri-right">
-          <div class="sri-kcal">${kcal} kcal</div>
-          <div class="sri-macros">${carbs}g C · ${protein}g P · ${fat}g F</div>
-          <button class="sri-select-btn" onclick="selectSearchResult(this)">Select</button>
-        </div>`;
-      item.dataset.food = foodObj;
-      resultsEl.appendChild(item);
-    });
-
-  } catch(e) {
-    statusEl.textContent = '⚠️ Network error — check connection';
-    statusEl.className = 'search-status error';
-  }
-}
-
-// Called when user clicks "Select" on a search result
-function selectSearchResult(btn) {
-  const item = btn.closest('.search-result-item');
-  const food = JSON.parse(item.dataset.food);
-
-  // Highlight selected item
-  document.querySelectorAll('.search-result-item').forEach(el => el.style.borderColor = '');
-  item.style.borderColor = 'var(--green)';
-
-  pendingFood = food;
-  showFoodResult(food);
-  // Scroll down to show the food result card
-  item.scrollIntoView({ behavior:'smooth', block:'nearest' });
-}
-
-// ── OPEN FOOD FACTS BARCODE LOOKUP ────────────────────────────────────────
-async function lookupBarcode(barcode, statusId) {
-  const sid = statusId || 'scanStatus';
-  barcode = String(barcode).trim().replace(/\D/g,'');
-  if (!barcode) { setStatus('Please enter a barcode','error',sid); return; }
-  setStatus('<span class="spinner"></span>Looking up…','',sid);
-  hideFoodResult();
-  try {
-    const res  = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
-    const data = await res.json();
-    if (!data || data.status===0 || !data.product) { setStatus('❌ Product not found','error',sid); lastCode=null; return; }
-    const p=data.product, n=p.nutriments||{};
-    let kcal100 = n['energy-kcal_100g'] || (n['energy_100g']?n['energy_100g']/4.184:0);
-    let factor=1, servingLabel='per 100g';
-    if (p.serving_size) { const m=p.serving_size.match(/([\d.]+)/); if(m){factor=parseFloat(m[1])/100;servingLabel=`per serving (${p.serving_size})`;} }
-    pendingFood = {
-      name:    p.product_name||p.product_name_en||'Unknown Product',
-      brand:   p.brands||'',
-      kcal:    Math.round(kcal100*factor),
-      carbs:   +((n['carbohydrates_100g']||0)*factor).toFixed(1),
-      protein: +((n['proteins_100g']||0)*factor).toFixed(1),
-      fat:     +((n['fat_100g']||0)*factor).toFixed(1),
-      servingLabel
-    };
-    showFoodResult(pendingFood);
-    setStatus('✅ Found! Choose meal and tap Add.','found',sid);
-  } catch(e) { setStatus('⚠️ Network error','error',sid); lastCode=null; }
-}
-function lookupManual(){
-  lastCode=null;
-  const barcode = document.getElementById('manualBarcode').value;
-  lookupBarcode(barcode, 'barcodeStatus');
-}
-function setStatus(html,cls,elId){
-  const id = elId || 'scanStatus';
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.innerHTML=html; el.className='scan-status'+(cls?' '+cls:'');
-}
-function showFoodResult(f){
-  document.getElementById('frName').textContent=f.name;
-  document.getElementById('frBrand').textContent=f.brand||'Unknown brand';
-  document.getElementById('frServing').textContent='📏 '+f.servingLabel;
-  document.getElementById('frKcal').textContent=f.kcal;
-  document.getElementById('frCarbs').textContent=f.carbs;
-  document.getElementById('frProtein').textContent=f.protein;
-  document.getElementById('frFat').textContent=f.fat;
-  if(currentScanMealId) document.getElementById('frMealSelect').value=currentScanMealId;
-  document.getElementById('foodResult').classList.add('show');
-}
-function hideFoodResult(){ document.getElementById('foodResult').classList.remove('show'); pendingFood=null; }
-function addScannedFood(){
-  if(!pendingFood) return;
-  const mealId=document.getElementById('frMealSelect').value;
-  meals.find(m=>m.id===mealId).items.push({...pendingFood});
-  renderMeals(); openMeal(mealId); updateSummary(); scheduleSave();
-  showToast(`${pendingFood.name} added!`);
-  closeScanner();
-}
-
-// ── QUAGGA SCANNER ────────────────────────────────────────────────────────
-function openScanner(mealId){
-  currentScanMealId=mealId; lastCode=null; pendingFood=null;
-  document.getElementById('scannerModal').classList.add('open');
-  document.getElementById('manualBarcode').value='';
-  document.getElementById('foodSearchInput').value='';
-  document.getElementById('searchResults').innerHTML='';
-  document.getElementById('searchStatus').textContent='';
-  hideFoodResult();
-  // Always start on Scan tab
-  switchTab('scan');
-}
-function closeScanner(){ document.getElementById('scannerModal').classList.remove('open'); stopQuagga(); hideFoodResult(); }
-function startQuagga(){
-  if(scannerRunning||typeof Quagga==='undefined') { showNoCameraNote('Barcode library not loaded. Use manual entry.'); return; }
-  Quagga.init({
-    inputStream:{ name:'Live', type:'LiveStream', target:document.getElementById('interactive'), constraints:{width:{ideal:1280},height:{ideal:720},facingMode:'environment'} },
-    decoder:{ readers:['ean_reader','ean_8_reader','upc_reader','upc_e_reader','code_128_reader'] },
-    locate:true, frequency:10
-  }, function(err){
-    if(err){ showNoCameraNote('Camera unavailable.<br>Use manual entry below.'); return; }
-    scannerRunning=true; Quagga.start(); setStatus('📷 Scanning… hold barcode steady','');
-  });
-  Quagga.onDetected(function(result){
-    const code=result.codeResult.code; if(!code||code===lastCode) return;
-    const err=result.codeResult.startInfo?result.codeResult.startInfo.error:1;
-    if(err>0.3) return;
-    lastCode=code; setStatus(`📦 ${code}`,'found','scanStatus'); lookupBarcode(code,'scanStatus');
-  });
-}
-function stopQuagga(){ if(!scannerRunning) return; try{Quagga.offDetected();Quagga.stop();}catch(e){} scannerRunning=false; }
-function showNoCameraNote(msg){ document.getElementById('cameraArea').innerHTML=`<div class="no-camera-note"><strong>📷 Camera Unavailable</strong>${msg}</div>`; setStatus('Use manual entry below ↓','error'); }
-
-// ── TRACKER CORE ──────────────────────────────────────────────────────────
-function estimateMacros(kcal){ return {carbs:Math.round(kcal*.5/4),protein:Math.round(kcal*.2/4),fat:Math.round(kcal*.3/9)}; }
-function totalKcal(){ return meals.reduce((s,m)=>s+m.items.reduce((ss,i)=>ss+i.kcal,0),0); }
-function totalMacros(){ const t={carbs:0,protein:0,fat:0}; meals.forEach(m=>m.items.forEach(i=>{t.carbs+=i.carbs;t.protein+=i.protein;t.fat+=i.fat;})); return t; }
-
-function updateSummary(){
-  const consumed=totalKcal(), remaining=Math.max(0,GOAL-consumed), pct=Math.min(consumed/GOAL,1), C=301;
-  document.getElementById('remainingNum').textContent=remaining;
-  document.getElementById('consumedVal').textContent=consumed+' kcal';
-  const circ=document.getElementById('ringCircle');
-  circ.style.strokeDashoffset=C-pct*C; circ.style.stroke=consumed>GOAL?'#e05252':'#3ecf8e';
-  const m=totalMacros();
-  document.getElementById('carbVal').textContent=m.carbs+'g';
-  document.getElementById('proteinVal').textContent=m.protein+'g';
-  document.getElementById('fatVal').textContent=m.fat+'g';
-  document.getElementById('carbBar').style.width=Math.min(m.carbs/MACRO_GOALS.carbs*100,100)+'%';
-  document.getElementById('proteinBar').style.width=Math.min(m.protein/MACRO_GOALS.protein*100,100)+'%';
-  document.getElementById('fatBar').style.width=Math.min(m.fat/MACRO_GOALS.fat*100,100)+'%';
-}
-
-function renderMeals(){
-  const container=document.getElementById('mealsContainer'); if(!container) return;
-  const open={};
-  meals.forEach(m=>{ const el=document.getElementById('log-'+m.id); if(el) open[m.id]=el.classList.contains('open'); });
-  container.innerHTML='';
-  meals.forEach(meal=>{
-    const mkcal=meal.items.reduce((s,i)=>s+i.kcal,0);
-    const card=document.createElement('div'); card.className='meal-card';
-    card.innerHTML=`
-      <div class="meal-header" onclick="toggleMeal('${meal.id}')">
-        <div class="meal-left">
-          <div class="meal-icon" style="background:${meal.color}22">${meal.icon}</div>
-          <div><div class="meal-name">${meal.name}</div><div class="meal-sub">${meal.items.length} item${meal.items.length!==1?'s':''}</div></div>
-        </div>
-        <div class="meal-right">
-          <div class="meal-kcal" style="color:${meal.color}">${mkcal} kcal</div>
-          <div class="meal-chevron${open[meal.id]?' open':''}" id="chev-${meal.id}">▼</div>
-        </div>
-      </div>
-      <div class="food-log${open[meal.id]?' open':''}" id="log-${meal.id}">
-        ${meal.items.map((item,idx)=>`
-          <div class="food-item">
-            <div>
-              <div class="food-name">${escHtml(item.name)}${item.brand?` <span style="color:var(--muted);font-size:11px;font-weight:400">· ${escHtml(item.brand)}</span>`:''}</div>
-              <div class="food-details">${item.carbs}g carbs · ${item.protein}g protein · ${item.fat}g fat</div>
-            </div>
-            <div class="food-right">
-              <div class="food-kcal">${item.kcal} kcal</div>
-              <button class="del-btn" onclick="deleteItem('${meal.id}',${idx})">✕</button>
-            </div>
-          </div>`).join('')}
-        <div class="add-food-row">
-          <button class="scan-btn" onclick="openScanner('${meal.id}')">📷 Scan</button>
-          <input class="food-input" id="fi-${meal.id}" type="text" placeholder="Food name…" onkeydown="if(event.key==='Enter')addManual('${meal.id}')"/>
-          <input class="kcal-input" id="ki-${meal.id}" type="number" placeholder="kcal" onkeydown="if(event.key==='Enter')addManual('${meal.id}')"/>
-          <button class="log-btn" onclick="addManual('${meal.id}')">+ Log</button>
-        </div>
-      </div>`;
-    container.appendChild(card);
-  });
-}
-
-function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function toggleMeal(id){ document.getElementById('log-'+id).classList.toggle('open'); document.getElementById('chev-'+id).classList.toggle('open'); }
-function openMeal(id){ document.getElementById('log-'+id).classList.add('open'); document.getElementById('chev-'+id).classList.add('open'); }
-
-function addManual(mealId){
-  const ni=document.getElementById('fi-'+mealId), ki=document.getElementById('ki-'+mealId);
-  const name=ni.value.trim(), kcal=parseInt(ki.value);
-  if(!name||!kcal||kcal<=0) return;
-  meals.find(m=>m.id===mealId).items.push({name,brand:'',kcal,...estimateMacros(kcal)});
-  ni.value=''; ki.value='';
-  renderMeals(); openMeal(mealId); updateSummary(); scheduleSave();
-}
-function deleteItem(mealId,idx){
-  meals.find(m=>m.id===mealId).items.splice(idx,1);
-  renderMeals(); openMeal(mealId); updateSummary(); scheduleSave();
-}
-
-function showToast(msg,err=false){
-  const t=document.getElementById('toast');
-  t.textContent=msg; t.className='toast show'+(err?' err':'');
-  setTimeout(()=>t.className='toast'+(err?' err':''),3000);
-}
-
-// Modal backdrop close
-document.getElementById('scannerModal').addEventListener('click',function(e){if(e.target===this)closeScanner();});
-document.getElementById('confirmOverlay').addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');});
-
-// ── INIT ──────────────────────────────────────────────────────────────────
-// Show login screen immediately — Firebase module above will call showApp() if already logged in
-showLoginScreen();
-</script>
+<script src="app.js"></script>
 </body>
 </html>
