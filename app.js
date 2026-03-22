@@ -1,7 +1,8 @@
 // ── APP STATE ────────────────────────────────────────────────────────────
-const GOAL = 2201;
-const MACRO_GOALS = { carbs:220, protein:140, fat:73 };
+let GOAL = 2201;
+let MACRO_GOALS = { carbs:220, protein:140, fat:73 };
 const LS_KEY = 'nutritrack_v1';  // localStorage fallback key
+const GOALS_KEY = 'nutritrack_goals';
 
 const meals = [
   { id:'breakfast', name:'Breakfast', icon:'☀️', color:'#f59e0b', items:[] },
@@ -650,6 +651,221 @@ function showToast(msg,err=false){
 // Modal backdrop close
 document.getElementById('scannerModal').addEventListener('click',function(e){if(e.target===this)closeScanner();});
 document.getElementById('confirmOverlay').addEventListener('click',function(e){if(e.target===this)closeConfirm();});
+
+// ── GOAL SETTINGS ────────────────────────────────────────────────────────
+let releaseGoalTrap = null;
+
+function calcTDEE(sex, age, height, weight, activity) {
+  // Mifflin-St Jeor equation
+  let bmr;
+  if (sex === 'male') bmr = 10 * weight + 6.25 * height - 5 * age + 5;
+  else bmr = 10 * weight + 6.25 * height - 5 * age - 161;
+  return Math.round(bmr * activity);
+}
+
+// Health condition adjustments
+const CONDITION_INFO = {
+  heart:        { label: 'Heart condition', carbPct: 0.50, proteinPct: 0.25, fatPct: 0.25, calAdj: -0.05, note: 'Lower fat intake, focus on unsaturated fats, fibre-rich foods.' },
+  pcos:         { label: 'PCOS',            carbPct: 0.30, proteinPct: 0.35, fatPct: 0.35, calAdj: -0.05, note: 'Lower carbs to help insulin sensitivity, higher protein.' },
+  diabetes:     { label: 'Type 2 Diabetes', carbPct: 0.30, proteinPct: 0.30, fatPct: 0.40, calAdj: -0.05, note: 'Reduced carbs for blood sugar control, avoid refined sugars.' },
+  hypertension: { label: 'High BP',         carbPct: 0.45, proteinPct: 0.25, fatPct: 0.30, calAdj:  0,    note: 'DASH-style diet: fruits, veg, whole grains, limit sodium.' },
+  thyroid:      { label: 'Hypothyroidism',   carbPct: 0.40, proteinPct: 0.30, fatPct: 0.30, calAdj: -0.10, note: 'Slower metabolism — slightly lower calorie target. Ensure iodine & selenium.' },
+  kidney:       { label: 'Kidney disease',   carbPct: 0.50, proteinPct: 0.15, fatPct: 0.35, calAdj:  0,    note: 'Lower protein to reduce kidney load. Limit potassium & phosphorus.' },
+};
+
+function calcGoals(formData) {
+  const tdee = calcTDEE(formData.sex, formData.age, formData.height, formData.weight, formData.activity);
+  let dailyCal = Math.round(tdee + formData.rate * 1100); // ~1100 kcal per kg/week
+
+  // Default macro split
+  let carbPct = 0.40, proteinPct = 0.30, fatPct = 0.30;
+  const conditions = formData.conditions || [];
+  const notes = [];
+
+  // Apply condition adjustments — average if multiple
+  if (conditions.length > 0) {
+    let totalCalAdj = 0;
+    let cP = 0, pP = 0, fP = 0;
+    conditions.forEach(c => {
+      const info = CONDITION_INFO[c];
+      if (!info) return;
+      cP += info.carbPct;
+      pP += info.proteinPct;
+      fP += info.fatPct;
+      totalCalAdj += info.calAdj;
+      notes.push(info.note);
+    });
+    carbPct = cP / conditions.length;
+    proteinPct = pP / conditions.length;
+    fatPct = fP / conditions.length;
+    // Apply calorie adjustment (average of adjustments)
+    dailyCal = Math.round(dailyCal * (1 + totalCalAdj / conditions.length));
+  }
+
+  dailyCal = Math.max(1200, dailyCal);
+
+  const macros = {
+    carbs: Math.round(dailyCal * carbPct / 4),
+    protein: Math.round(dailyCal * proteinPct / 4),
+    fat: Math.round(dailyCal * fatPct / 9)
+  };
+  // Estimate goal date
+  let goalDate = null;
+  const diff = formData.target - formData.weight;
+  if (formData.rate !== 0 && Math.sign(diff) === Math.sign(formData.rate)) {
+    const weeks = Math.abs(diff / formData.rate);
+    const d = new Date();
+    d.setDate(d.getDate() + Math.round(weeks * 7));
+    goalDate = d;
+  }
+  return { tdee, dailyCal, macros, goalDate, notes };
+}
+
+function openGoalSettings() {
+  const modal = document.getElementById('goalModal');
+  modal.classList.add('open');
+  modal.removeAttribute('aria-hidden');
+  // Load saved values
+  const saved = loadGoalData();
+  if (saved) {
+    document.getElementById('gfSex').value = saved.sex || 'male';
+    document.getElementById('gfAge').value = saved.age || '';
+    document.getElementById('gfHeight').value = saved.height || '';
+    document.getElementById('gfWeight').value = saved.weight || '';
+    document.getElementById('gfTarget').value = saved.target || '';
+    document.getElementById('gfActivity').value = saved.activity || '1.55';
+    document.getElementById('gfRate').value = saved.rate || '-0.5';
+    // Restore condition checkboxes
+    const conditions = saved.conditions || [];
+    document.querySelectorAll('#gfConditions input').forEach(el => {
+      el.checked = conditions.includes(el.value);
+    });
+  } else {
+    document.querySelectorAll('#gfConditions input').forEach(el => { el.checked = false; });
+  }
+  updateGoalPreview();
+  releaseGoalTrap = trapFocus(modal.querySelector('.scanner-modal'), closeGoalSettings);
+  // Live preview on input change
+  modal.querySelectorAll('input,select').forEach(el => {
+    el.addEventListener('input', updateGoalPreview);
+    el.addEventListener('change', updateGoalPreview);
+  });
+}
+
+function closeGoalSettings() {
+  const modal = document.getElementById('goalModal');
+  modal.classList.remove('open');
+  modal.setAttribute('aria-hidden', 'true');
+  if (releaseGoalTrap) { releaseGoalTrap(); releaseGoalTrap = null; }
+}
+
+function getGoalFormData() {
+  const conditions = [...document.querySelectorAll('#gfConditions input:checked')].map(el => el.value);
+  return {
+    sex: document.getElementById('gfSex').value,
+    age: parseInt(document.getElementById('gfAge').value) || 0,
+    height: parseInt(document.getElementById('gfHeight').value) || 0,
+    weight: parseFloat(document.getElementById('gfWeight').value) || 0,
+    target: parseFloat(document.getElementById('gfTarget').value) || 0,
+    activity: parseFloat(document.getElementById('gfActivity').value) || 1.55,
+    rate: parseFloat(document.getElementById('gfRate').value) || 0,
+    conditions
+  };
+}
+
+function updateGoalPreview() {
+  const data = getGoalFormData();
+  const preview = document.getElementById('gfPreview');
+  const notesEl = document.getElementById('gfConditionNotes');
+  if (!data.age || !data.height || !data.weight) {
+    preview.innerHTML = '<div class="gfp-label">Fill in your details to see your target</div>';
+    if (notesEl) notesEl.innerHTML = '';
+    return;
+  }
+  const g = calcGoals(data);
+  const goalDateStr = g.goalDate ? g.goalDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+  preview.innerHTML = `
+    <div class="gfp-kcal">${g.dailyCal} kcal/day</div>
+    <div class="gfp-label">TDEE: ${g.tdee} kcal · Goal date: ${goalDateStr}</div>
+    <div class="gfp-macros">
+      <span style="color:var(--blue)">${g.macros.carbs}g carbs</span>
+      <span style="color:var(--green)">${g.macros.protein}g protein</span>
+      <span style="color:var(--orange)">${g.macros.fat}g fat</span>
+    </div>`;
+  if (notesEl) {
+    notesEl.innerHTML = g.notes.length ? '⚠️ ' + g.notes.join(' ') : '';
+  }
+}
+
+function saveGoalSettings() {
+  const data = getGoalFormData();
+  if (!data.age || !data.height || !data.weight) {
+    showToast('Please fill in age, height and weight', true);
+    return;
+  }
+  localStorage.setItem(GOALS_KEY, JSON.stringify(data));
+  applyGoals(data);
+  closeGoalSettings();
+  showToast('Goals saved!');
+}
+
+function loadGoalData() {
+  try { return JSON.parse(localStorage.getItem(GOALS_KEY)); } catch (e) { return null; }
+}
+
+function applyGoals(data) {
+  const g = calcGoals(data);
+  GOAL = g.dailyCal;
+  MACRO_GOALS = g.macros;
+  // Update header badge
+  const badge = document.querySelector('.goal-badge');
+  if (badge) badge.textContent = `Goal: ${GOAL} kcal`;
+  // Update calorie ring goal display
+  const goalValEl = document.querySelector('.stat-val[style*="--green"]');
+  if (goalValEl) goalValEl.textContent = GOAL + ' kcal';
+  // Update My Plan card
+  const rateVal = Math.abs(data.rate);
+  const planRate = document.getElementById('planRate');
+  const planRateLabel = document.getElementById('planRateLabel');
+  const planKcal = document.getElementById('planKcal');
+  const planGoalDate = document.getElementById('planGoalDate');
+  const goalDetails = document.getElementById('goalDetails');
+  if (planRate) planRate.textContent = rateVal + 'kg';
+  if (planRateLabel) planRateLabel.textContent = data.rate < 0 ? 'lose / week' : data.rate > 0 ? 'gain / week' : 'maintain';
+  if (planKcal) planKcal.textContent = GOAL;
+  if (planGoalDate) {
+    planGoalDate.textContent = g.goalDate
+      ? g.goalDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+      : '—';
+  }
+  if (goalDetails) {
+    goalDetails.innerHTML = `<span>${data.weight}kg → ${data.target}kg</span><span>TDEE: ${g.tdee}</span>`;
+  }
+  // Update exercise recommendation based on activity
+  const exAdvice = document.getElementById('exAdvice');
+  if (exAdvice) {
+    const levels = { '1.2': '1–2 days/week · 30 min · Light walks', '1.375': '1–3 days/week · 45 min · Low–moderate intensity', '1.55': '3–5 days/week · 60 min · Moderate intensity', '1.725': '5–6 days/week · 60–90 min · High intensity', '1.9': '6–7 days/week · 90+ min · Very high intensity' };
+    exAdvice.textContent = levels[String(data.activity)] || levels['1.55'];
+  }
+  // Update macro bar max values
+  const carbBar = document.getElementById('carbBar');
+  const proteinBar = document.getElementById('proteinBar');
+  const fatBar = document.getElementById('fatBar');
+  if (carbBar) carbBar.setAttribute('aria-valuemax', MACRO_GOALS.carbs);
+  if (proteinBar) proteinBar.setAttribute('aria-valuemax', MACRO_GOALS.protein);
+  if (fatBar) fatBar.setAttribute('aria-valuemax', MACRO_GOALS.fat);
+  // Refresh summary
+  updateSummary();
+}
+
+// Load saved goals on startup
+(function() {
+  const saved = loadGoalData();
+  if (saved) applyGoals(saved);
+})();
+
+// Close goal modal on backdrop click
+document.getElementById('goalModal').addEventListener('click', function(e) { if (e.target === this) closeGoalSettings(); });
 
 // ── THEME TOGGLE ─────────────────────────────────────────────────────────
 function toggleTheme() {
