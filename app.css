@@ -325,3 +325,92 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 :root.light .scanner-viewport{border-color:var(--border)}
 :root.light #ringCircle{stroke:var(--green)}
 :root.light circle[stroke="#1f2127"]{stroke:var(--border)}
+
+/* ── MOBILE / TOUCH OPTIMISATIONS ────────────────────────────────────── */
+
+/* Safe area bottom padding (iPhone notch / home indicator) */
+body{padding-bottom:calc(100px + env(safe-area-inset-bottom, 0px))}
+
+/* Prevent iOS double-tap zoom on buttons */
+button,a{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+
+/* Prevent iOS input zoom (font-size must be ≥16px) */
+input,select,textarea{font-size:16px!important}
+
+/* Override to keep visual proportions where we set 13px explicitly — use transform scale */
+.food-input,.kcal-input,.search-input,.barcode-text-input,.water-custom-input,
+.fr-unit-select,.fr-meal-select,.fr-gram-input,.fr-qty-input,
+.gf-input,.gf-select,.emUnit,#emGrams,.emQty,#emQty,
+#exType,#exDuration,#exIntensity,#waterCustom{
+  font-size:16px!important;
+}
+
+/* Header — tighter on small screens */
+.header{padding:16px 16px 8px}
+.header-title{font-size:22px}
+
+/* Larger close button touch target */
+.close-btn{width:44px;height:44px;font-size:16px}
+
+/* Bigger qty +/− buttons for thumbs */
+.fr-qty-btn{width:44px;height:44px;font-size:20px;border-radius:10px}
+.fr-qty-input{width:56px;height:44px;font-size:16px}
+
+/* Bigger inline add button */
+.iri-add-btn{width:44px;height:44px;border-radius:10px;font-size:20px}
+
+/* Bigger date nav buttons */
+.date-nav-btn{padding:10px 14px;font-size:14px;min-height:40px}
+.date-nav-today{padding:10px 14px;font-size:12px;min-height:40px}
+.date-nav-label{font-size:12px}
+
+/* Persist bar — scroll horizontally on tiny screens */
+.persist-bar{overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap}
+.persist-right{flex-shrink:0}
+
+/* Bigger meal card add button */
+.log-btn,.scan-btn{min-height:44px;padding:10px 14px}
+.scan-btn{font-size:13px}
+
+/* Bigger water presets */
+.water-preset{min-height:44px;padding:10px 13px;font-size:13px}
+.water-custom-btn{min-height:44px;padding:10px 16px}
+.water-undo-btn{min-height:44px}
+
+/* Food item — easier tap on edit/delete */
+.del-btn,.edit-btn{min-width:36px;min-height:36px;font-size:15px;display:flex;align-items:center;justify-content:center}
+
+/* Modal scroll feel */
+.scanner-modal{-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+
+/* Inline results list — more height on mobile */
+.inline-results{max-height:240px}
+
+/* Search results — slightly more height */
+.search-results{max-height:320px}
+
+/* History badges */
+.sri-history-badge,.iri-history-badge{
+  display:inline-block;background:rgba(167,139,250,.18);color:var(--purple);
+  border:1px solid rgba(167,139,250,.3);border-radius:6px;
+  padding:2px 7px;font-size:11px;font-weight:700;margin-bottom:4px;
+  letter-spacing:.02em;
+}
+.history-group-label{
+  font-size:11px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.08em;
+  padding:6px 2px 4px;
+}
+
+/* Food result card actions — stack on very narrow screens */
+@media(max-width:360px){
+  .fr-actions{flex-direction:column}
+  .fr-add-btn{text-align:center}
+  .inline-search-wrap{gap:5px}
+}
+
+/* Slightly larger ring numbers on mobile */
+@media(max-width:400px){
+  .ring-num{font-size:19px}
+  .ring-card{gap:14px}
+}

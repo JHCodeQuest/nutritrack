@@ -3,6 +3,8 @@ let GOAL = 2201;
 let MACRO_GOALS = { carbs:220, protein:140, fat:73 };
 const LS_KEY = 'nutritrack_v1';  // localStorage fallback key
 const GOALS_KEY = 'nutritrack_goals';
+const HISTORY_KEY = 'nutritrack_history';
+const HISTORY_MAX = 30;
 
 const meals = [
   { id:'breakfast', name:'Breakfast', icon:'☀️', color:'#f59e0b', items:[] },
@@ -253,6 +255,7 @@ function switchTab(tab) {
   }
   if (tab === 'search') {
     setTimeout(() => document.getElementById('foodSearchInput').focus(), 100);
+    renderRecentSearch();
   }
 }
 
@@ -272,13 +275,14 @@ document.getElementById('scannerModal').addEventListener('keydown', function(e) 
 // ── FOOD NAME SEARCH (Open Food Facts search API) ─────────────────────────
 async function searchFood() {
   const query = document.getElementById('foodSearchInput').value.trim();
-  if (!query) return;
+  if (!query) { renderRecentSearch(); return; }
 
   const statusEl  = document.getElementById('searchStatus');
   const resultsEl = document.getElementById('searchResults');
   statusEl.innerHTML = '<span class="spinner"></span>Searching…';
   statusEl.className = 'search-status';
   resultsEl.innerHTML = '';
+  const rss = document.getElementById('recentSearchSection'); if (rss) rss.style.display = 'none';
   hideFoodResult();
 
   // Cancel previous in-flight request
@@ -318,6 +322,35 @@ async function searchFood() {
     statusEl.className = 'search-status';
 
     resultsEl.innerHTML = '';
+    // Prepend matching history items
+    const histMatches = filterHistory(query);
+    if (histMatches.length) {
+      const hdr = document.createElement('div');
+      hdr.className = 'history-group-label';
+      hdr.textContent = 'Recently added';
+      resultsEl.appendChild(hdr);
+      histMatches.forEach(food => {
+        const item = document.createElement('div');
+        item.className = 'search-result-item';
+        item.dataset.food = _makeHistoryFoodObj(food);
+        item.innerHTML = `
+          <div class="sri-left">
+            <div class="sri-history-badge">Recent</div>
+            <div class="sri-name">${escHtml(food.name)}</div>
+            ${food.brand ? `<div class="sri-brand">${escHtml(food.brand)}</div>` : ''}
+          </div>
+          <div class="sri-right">
+            <div class="sri-kcal">${food.kcal} kcal</div>
+            <div class="sri-macros">${food.carbs}g C · ${food.protein}g P · ${food.fat}g F</div>
+            <button class="sri-select-btn" onclick="selectSearchResult(this)">Select</button>
+          </div>`;
+        resultsEl.appendChild(item);
+      });
+      const sep = document.createElement('div');
+      sep.className = 'history-group-label';
+      sep.textContent = 'All results';
+      resultsEl.appendChild(sep);
+    }
     products.forEach((p, idx) => {
       const n = p.nutriments || {};
       let kcal100 = n['energy-kcal_100g'] != null ? n['energy-kcal_100g'] : (n['energy_100g'] ? n['energy_100g']/4.184 : 0);
@@ -491,6 +524,7 @@ function addScannedFood(){
   };
   meals.find(m=>m.id===mealId).items.push(item);
   renderMeals(); openMeal(mealId); updateSummary(); scheduleSave();
+  saveToHistory(pendingFood);
   showToast(`${item.name} added!`);
   closeScanner();
 }
@@ -522,6 +556,7 @@ function openScanner(mealId){
   document.getElementById('foodSearchInput').value='';
   document.getElementById('searchResults').innerHTML='';
   document.getElementById('searchStatus').textContent='';
+  const rss = document.getElementById('recentSearchSection'); if (rss) rss.style.display = 'none';
   hideFoodResult();
   switchTab('scan');
   releaseScannerTrap = trapFocus(modal.querySelector('.scanner-modal'), closeScanner);
@@ -623,7 +658,7 @@ function renderMeals(){
           </div>`).join('')}
         <div class="add-food-row">
           <div class="inline-search-wrap">
-            <input class="food-input" id="fi-${meal.id}" type="text" placeholder="Search food…" aria-label="Search food for ${meal.name}" oninput="debouncedInlineSearch('${meal.id}')" onkeydown="if(event.key==='Enter'){clearTimeout(_inlineDebounce);inlineSearch('${meal.id}')}" autocomplete="off"/>
+            <input class="food-input" id="fi-${meal.id}" type="text" placeholder="Search food…" aria-label="Search food for ${meal.name}" oninput="debouncedInlineSearch('${meal.id}')" onfocus="debouncedInlineSearch('${meal.id}')" onkeydown="if(event.key==='Enter'){clearTimeout(_inlineDebounce);inlineSearch('${meal.id}')}" autocomplete="off"/>
             <button class="log-btn" onclick="inlineSearch('${meal.id}')">🔍</button>
             <button class="scan-btn" onclick="openScanner('${meal.id}')">📷 Scan</button>
           </div>
@@ -648,6 +683,72 @@ function openMeal(id){
   const btn=log.previousElementSibling; if(btn) btn.setAttribute('aria-expanded','true');
 }
 
+// ── FOOD HISTORY ─────────────────────────────────────────────────────────
+function saveToHistory(food) {
+  try {
+    const history = getHistory();
+    const key = (food.name + '|' + (food.brand || '')).toLowerCase();
+    const filtered = history.filter(h => (h.name + '|' + (h.brand || '')).toLowerCase() !== key);
+    filtered.unshift({
+      name: food.name, brand: food.brand || '',
+      kcal: food.kcal, carbs: food.carbs, protein: food.protein, fat: food.fat,
+      servingLabel: food.servingLabel, kcal100: food.kcal100,
+      carbs100: food.carbs100, protein100: food.protein100, fat100: food.fat100,
+      servingFactor: food.servingFactor, addedAt: Date.now()
+    });
+    if (filtered.length > HISTORY_MAX) filtered.length = HISTORY_MAX;
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(filtered));
+  } catch(e) {}
+}
+function getHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch(e) { return []; }
+}
+function filterHistory(query) {
+  const history = getHistory();
+  if (!query) return history.slice(0, 8);
+  const q = query.toLowerCase();
+  return history.filter(h => h.name.toLowerCase().includes(q) || (h.brand && h.brand.toLowerCase().includes(q))).slice(0, 5);
+}
+
+function _makeHistoryFoodObj(food) {
+  return JSON.stringify({
+    name: food.name, brand: food.brand, kcal: food.kcal, carbs: food.carbs,
+    protein: food.protein, fat: food.fat, servingLabel: food.servingLabel,
+    kcal100: food.kcal100, carbs100: food.carbs100, protein100: food.protein100,
+    fat100: food.fat100, servingFactor: food.servingFactor
+  });
+}
+
+// Renders recent foods into the "recentSearchSection" in the search pane
+function renderRecentSearch() {
+  const section = document.getElementById('recentSearchSection');
+  const list = document.getElementById('recentSearchList');
+  if (!section || !list) return;
+  const query = (document.getElementById('foodSearchInput') || {}).value || '';
+  if (query.trim()) { section.style.display = 'none'; return; }
+  const history = getHistory();
+  if (!history.length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  list.innerHTML = '';
+  history.slice(0, 8).forEach(food => {
+    const item = document.createElement('div');
+    item.className = 'search-result-item';
+    item.dataset.food = _makeHistoryFoodObj(food);
+    item.innerHTML = `
+      <div class="sri-left">
+        <div class="sri-history-badge">Recent</div>
+        <div class="sri-name">${escHtml(food.name)}</div>
+        ${food.brand ? `<div class="sri-brand">${escHtml(food.brand)}</div>` : ''}
+      </div>
+      <div class="sri-right">
+        <div class="sri-kcal">${food.kcal} kcal</div>
+        <div class="sri-macros">${food.carbs}g C · ${food.protein}g P · ${food.fat}g F</div>
+        <button class="sri-select-btn" onclick="selectSearchResult(this)">Select</button>
+      </div>`;
+    list.appendChild(item);
+  });
+}
+
 // ── SEARCH OPTIMISATION ─────────────────────────────────────────────────
 let _inlineDebounce = null;
 let _inlineAbort = null;
@@ -658,7 +759,26 @@ const CACHE_MAX = 50;
 function debouncedInlineSearch(mealId) {
   clearTimeout(_inlineDebounce);
   const query = document.getElementById('fi-'+mealId).value.trim();
-  if (!query) { document.getElementById('ir-'+mealId).innerHTML = ''; return; }
+  if (!query) {
+    const resultsEl = document.getElementById('ir-'+mealId);
+    const history = getHistory();
+    if (!history.length) { resultsEl.innerHTML = ''; return; }
+    resultsEl.innerHTML = '';
+    history.slice(0, 6).forEach(food => {
+      const item = document.createElement('div');
+      item.className = 'inline-result-item';
+      item.dataset.food = _makeHistoryFoodObj(food);
+      item.innerHTML = `
+        <div class="iri-left">
+          <div class="iri-history-badge">Recent</div>
+          <div class="iri-name">${escHtml(food.name)}</div>
+          <div class="iri-meta">${food.brand ? escHtml(food.brand)+' · ' : ''}${food.kcal} kcal · ${food.carbs}g C · ${food.protein}g P · ${food.fat}g F</div>
+        </div>
+        <button class="iri-add-btn" onclick="addInlineFood('${mealId}',this)" aria-label="Quick add ${escHtml(food.name)}">+</button>`;
+      resultsEl.appendChild(item);
+    });
+    return;
+  }
   if (query.length < 2) return;
   _inlineDebounce = setTimeout(() => inlineSearch(mealId), 300);
 }
@@ -687,8 +807,23 @@ async function inlineSearch(mealId){
       _searchCache.set(cacheKey,products);
     } catch(e){ if(e.name==='AbortError') return; resultsEl.innerHTML='<div class="inline-no-results">Network error</div>'; return; }
   }
-    if(!products.length){ resultsEl.innerHTML='<div class="inline-no-results">No results found</div>'; return; }
+    const histInline = filterHistory(query);
+    if(!products.length && !histInline.length){ resultsEl.innerHTML='<div class="inline-no-results">No results found</div>'; return; }
     resultsEl.innerHTML='';
+    // Prepend history matches
+    histInline.forEach(food => {
+      const item = document.createElement('div');
+      item.className = 'inline-result-item';
+      item.dataset.food = _makeHistoryFoodObj(food);
+      item.innerHTML = `
+        <div class="iri-left">
+          <div class="iri-history-badge">Recent</div>
+          <div class="iri-name">${escHtml(food.name)}</div>
+          <div class="iri-meta">${food.brand ? escHtml(food.brand)+' · ' : ''}${food.kcal} kcal · ${food.carbs}g C · ${food.protein}g P · ${food.fat}g F</div>
+        </div>
+        <button class="iri-add-btn" onclick="addInlineFood('${mealId}',this)" aria-label="Quick add ${escHtml(food.name)}">+</button>`;
+      resultsEl.appendChild(item);
+    });
     products.forEach(p=>{
       const n=p.nutriments||{};
       let kcal100=n['energy-kcal_100g']!=null?n['energy-kcal_100g']:(n['energy_100g']?n['energy_100g']/4.184:0);
