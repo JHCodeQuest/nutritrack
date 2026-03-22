@@ -486,7 +486,8 @@ function addScannedFood(){
     kcal: Math.round(p.kcal100*totalFactor),
     carbs: +(p.carbs100*totalFactor).toFixed(1),
     protein: +(p.protein100*totalFactor).toFixed(1),
-    fat: +(p.fat100*totalFactor).toFixed(1)
+    fat: +(p.fat100*totalFactor).toFixed(1),
+    kcal100: p.kcal100, carbs100: p.carbs100, protein100: p.protein100, fat100: p.fat100, servingFactor: p.servingFactor
   };
   meals.find(m=>m.id===mealId).items.push(item);
   renderMeals(); openMeal(mealId); updateSummary(); scheduleSave();
@@ -544,6 +545,7 @@ function startQuagga(){
     scannerRunning=true; Quagga.start(); setStatus('📷 Scanning… hold barcode steady','');
   });
   Quagga.onDetected(function(result){
+    if(pendingFood) return; // food already found — don't wipe it if camera moves
     const code=result.codeResult.code; if(!code||code===lastCode) return;
     const err=result.codeResult.startInfo?result.codeResult.startInfo.error:1;
     if(err>0.3) return;
@@ -615,6 +617,7 @@ function renderMeals(){
             </div>
             <div class="food-right">
               <div class="food-kcal">${item.kcal} kcal</div>
+              <button class="edit-btn" onclick="openEditModal('${meal.id}',${idx})" aria-label="Edit ${escHtml(item.name)}">✏️</button>
               <button class="del-btn" onclick="deleteItem('${meal.id}',${idx})" aria-label="Delete ${escHtml(item.name)}">✕</button>
             </div>
           </div>`).join('')}
@@ -733,6 +736,116 @@ function deleteItem(mealId,idx){
   if (input) input.focus();
 }
 
+// ── EDIT FOOD ITEM ────────────────────────────────────────────────────────
+let editMealId = null;
+let editItemIdx = null;
+let releaseEditTrap = null;
+
+function openEditModal(mealId, idx) {
+  editMealId = mealId;
+  editItemIdx = idx;
+  const item = meals.find(m => m.id === mealId).items[idx];
+  document.getElementById('emName').textContent = item.name;
+  document.getElementById('emBrand').textContent = item.brand || '';
+  const hasBaseData = item.kcal100 != null;
+  document.getElementById('emServingControls').style.display = hasBaseData ? '' : 'none';
+  document.getElementById('emRawControls').style.display = hasBaseData ? 'none' : '';
+  if (hasBaseData) {
+    const unitSel = document.getElementById('emUnit');
+    const servingOpt = unitSel.querySelector('option[value="serving"]');
+    if (item.servingFactor && item.servingFactor !== 1) {
+      servingOpt.style.display = ''; unitSel.value = 'serving';
+    } else {
+      servingOpt.style.display = 'none'; unitSel.value = '100g';
+    }
+    document.getElementById('emGrams').style.display = 'none';
+    document.getElementById('emGrams').value = '';
+    document.getElementById('emQty').value = 1;
+    updateEditPreview();
+  } else {
+    document.getElementById('emRawKcal').value = item.kcal;
+    document.getElementById('emRawCarbs').value = item.carbs;
+    document.getElementById('emRawProtein').value = item.protein;
+    document.getElementById('emRawFat').value = item.fat;
+  }
+  const modal = document.getElementById('editModal');
+  modal.classList.add('open'); modal.removeAttribute('aria-hidden');
+  releaseEditTrap = trapFocus(modal.querySelector('.scanner-modal'), closeEditModal);
+}
+
+function closeEditModal() {
+  const modal = document.getElementById('editModal');
+  modal.classList.remove('open'); modal.setAttribute('aria-hidden', 'true');
+  if (releaseEditTrap) { releaseEditTrap(); releaseEditTrap = null; }
+}
+
+function updateEditPreview() {
+  if (editMealId === null || editItemIdx === null) return;
+  const item = meals.find(m => m.id === editMealId).items[editItemIdx];
+  if (!item || item.kcal100 == null) return;
+  const qty = parseFloat(document.getElementById('emQty').value) || 1;
+  const unit = document.getElementById('emUnit').value;
+  const gramInput = document.getElementById('emGrams');
+  const qtyLabel = document.getElementById('emQtyLabel');
+  gramInput.style.display = unit === 'custom' ? 'inline-block' : 'none';
+  if (unit === 'serving') qtyLabel.textContent = 'Servings';
+  else if (unit === '100g') qtyLabel.textContent = 'Qty (x100g)';
+  else qtyLabel.textContent = 'Qty';
+  let baseFactor;
+  if (unit === 'serving') baseFactor = item.servingFactor || 1;
+  else if (unit === 'custom') baseFactor = (parseFloat(gramInput.value) || 0) / 100;
+  else baseFactor = 1;
+  const totalFactor = baseFactor * qty;
+  document.getElementById('emKcal').textContent = Math.round(item.kcal100 * totalFactor);
+  document.getElementById('emCarbs').textContent = +(item.carbs100 * totalFactor).toFixed(1);
+  document.getElementById('emProtein').textContent = +(item.protein100 * totalFactor).toFixed(1);
+  document.getElementById('emFat').textContent = +(item.fat100 * totalFactor).toFixed(1);
+}
+
+function changeEditQty(delta) {
+  const input = document.getElementById('emQty');
+  let val = parseFloat(input.value) || 1;
+  val = Math.max(0.5, Math.round((val + delta) * 2) / 2);
+  input.value = val;
+  updateEditPreview();
+}
+
+function saveEditFood() {
+  const meal = meals.find(m => m.id === editMealId);
+  if (!meal) return;
+  const item = meal.items[editItemIdx];
+  if (!item) return;
+  if (item.kcal100 != null) {
+    const qty = parseFloat(document.getElementById('emQty').value) || 1;
+    const unit = document.getElementById('emUnit').value;
+    const gramInput = document.getElementById('emGrams');
+    let baseFactor;
+    if (unit === 'serving') baseFactor = item.servingFactor || 1;
+    else if (unit === 'custom') baseFactor = (parseFloat(gramInput.value) || 0) / 100;
+    else baseFactor = 1;
+    const totalFactor = baseFactor * qty;
+    // Strip any existing serving suffix then re-add
+    const baseName = item.name.replace(/ \(x[\d.]+\)$/, '').replace(/ \([\d.]+ x \d+g\)$/, '').replace(/ \(\d+g\)$/, '');
+    let newLabel = baseName;
+    if (unit === 'custom') { const g = parseFloat(gramInput.value) || 0; newLabel += qty !== 1 ? ` (${qty} x ${g}g)` : ` (${g}g)`; }
+    else if (unit === 'serving' && qty !== 1) newLabel += ` (x${qty})`;
+    else if (unit === '100g' && qty !== 1) newLabel += ` (x${qty})`;
+    item.name = newLabel;
+    item.kcal = Math.round(item.kcal100 * totalFactor);
+    item.carbs = +(item.carbs100 * totalFactor).toFixed(1);
+    item.protein = +(item.protein100 * totalFactor).toFixed(1);
+    item.fat = +(item.fat100 * totalFactor).toFixed(1);
+  } else {
+    item.kcal = parseFloat(document.getElementById('emRawKcal').value) || 0;
+    item.carbs = parseFloat(document.getElementById('emRawCarbs').value) || 0;
+    item.protein = parseFloat(document.getElementById('emRawProtein').value) || 0;
+    item.fat = parseFloat(document.getElementById('emRawFat').value) || 0;
+  }
+  renderMeals(); openMeal(editMealId); updateSummary(); scheduleSave();
+  showToast(`${item.name} updated!`);
+  closeEditModal();
+}
+
 function showToast(msg,err=false){
   const t=document.getElementById('toast');
   t.textContent=msg; t.className='toast show'+(err?' err':'');
@@ -742,6 +855,7 @@ function showToast(msg,err=false){
 // Modal backdrop close
 document.getElementById('scannerModal').addEventListener('click',function(e){if(e.target===this)closeScanner();});
 document.getElementById('confirmOverlay').addEventListener('click',function(e){if(e.target===this)closeConfirm();});
+document.getElementById('editModal').addEventListener('click',function(e){if(e.target===this)closeEditModal();});
 
 // ── WATER TRACKER ────────────────────────────────────────────────────────
 let WATER_GOAL = 2500; // ml

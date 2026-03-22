@@ -402,6 +402,55 @@
   </div>
 </div>
 
+<!-- EDIT FOOD MODAL -->
+<div class="modal-overlay" id="editModal" aria-hidden="true">
+  <div class="scanner-modal" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
+    <button class="close-btn" onclick="closeEditModal()" aria-label="Close">✕</button>
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="editModalTitle">Edit Serving</div>
+    <div class="food-result show" style="margin-top:0;max-height:none">
+      <div class="fr-name" id="emName"></div>
+      <div class="fr-brand" id="emBrand"></div>
+      <!-- Serving controls (shown when per-100g data is available) -->
+      <div id="emServingControls">
+        <div class="fr-unit-row">
+          <label class="fr-unit-label">Based on</label>
+          <select class="fr-unit-select" id="emUnit" onchange="updateEditPreview()">
+            <option value="serving">Per serving</option>
+            <option value="100g">Per 100g</option>
+            <option value="custom">Custom grams</option>
+          </select>
+          <input class="fr-gram-input" id="emGrams" type="number" min="1" placeholder="g" style="display:none" onchange="updateEditPreview()" oninput="updateEditPreview()"/>
+        </div>
+        <div class="fr-qty-row">
+          <span class="fr-qty-label" id="emQtyLabel">Servings</span>
+          <div class="fr-qty-ctrl">
+            <button class="fr-qty-btn" onclick="changeEditQty(-1)" aria-label="Decrease">−</button>
+            <input class="fr-qty-input" id="emQty" type="number" value="1" min="0.5" step="0.5" onchange="updateEditPreview()"/>
+            <button class="fr-qty-btn" onclick="changeEditQty(1)" aria-label="Increase">+</button>
+          </div>
+        </div>
+        <div class="fr-macros">
+          <div class="fr-macro-chip"><div class="fmc-val" id="emKcal" style="color:var(--green)">—</div><div class="fmc-label">kcal</div></div>
+          <div class="fr-macro-chip"><div class="fmc-val" id="emCarbs" style="color:var(--blue)">—</div><div class="fmc-label">carbs g</div></div>
+          <div class="fr-macro-chip"><div class="fmc-val" id="emProtein" style="color:var(--green)">—</div><div class="fmc-label">protein g</div></div>
+          <div class="fr-macro-chip"><div class="fmc-val" id="emFat" style="color:var(--orange)">—</div><div class="fmc-label">fat g</div></div>
+        </div>
+      </div>
+      <!-- Raw value editing (fallback for items without per-100g data) -->
+      <div id="emRawControls" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+          <div class="gf-row"><label class="gf-label" for="emRawKcal">kcal</label><div class="gf-input-wrap"><input class="gf-input" id="emRawKcal" type="number" min="0"/></div></div>
+          <div class="gf-row"><label class="gf-label" for="emRawCarbs">carbs (g)</label><div class="gf-input-wrap"><input class="gf-input" id="emRawCarbs" type="number" min="0" step="0.1"/></div></div>
+          <div class="gf-row"><label class="gf-label" for="emRawProtein">protein (g)</label><div class="gf-input-wrap"><input class="gf-input" id="emRawProtein" type="number" min="0" step="0.1"/></div></div>
+          <div class="gf-row"><label class="gf-label" for="emRawFat">fat (g)</label><div class="gf-input-wrap"><input class="gf-input" id="emRawFat" type="number" min="0" step="0.1"/></div></div>
+        </div>
+      </div>
+      <button class="fr-add-btn" style="width:100%;margin-top:14px" onclick="saveEditFood()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <script src="app.js"></script>

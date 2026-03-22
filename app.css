@@ -134,6 +134,8 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .food-kcal{font-size:13px;font-weight:600}
 .del-btn{background:none;border:none;color:var(--red);cursor:pointer;font-size:13px;opacity:.6;padding:2px 5px;transition:opacity .2s}
 .del-btn:hover{opacity:1}
+.edit-btn{background:none;border:none;cursor:pointer;font-size:13px;opacity:.5;padding:2px 5px;transition:opacity .2s}
+.edit-btn:hover{opacity:1}
 .add-food-row{margin-top:11px;border-top:1px solid var(--border);padding-top:12px}
 .inline-search-wrap{display:flex;gap:7px;flex-wrap:wrap}
 .food-input{flex:1;min-width:100px;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:8px 11px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none}
