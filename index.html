@@ -11,6 +11,11 @@
 </head>
 <body>
 
+<!-- ── LOADING SCREEN ────────────────────────────────────────────────── -->
+<div id="loadingScreen" aria-label="Loading" role="status">
+  <div class="loading-spinner"></div>
+</div>
+
 <!-- ── LOGIN SCREEN ─────────────────────────────────────────────────── -->
 <div id="loginScreen" style="display:none">
   <div class="login-wrap">
@@ -91,18 +96,18 @@
       </div>
     </div>
     <div class="ring-stats">
-      <div class="stat-row"><div class="stat-dot" style="background:var(--green)"></div><div><div class="stat-name">Goal</div><div class="stat-val" style="color:var(--green)">2201 kcal</div></div></div>
-      <div class="stat-row"><div class="stat-dot" style="background:var(--blue)"></div><div><div class="stat-name">Consumed</div><div class="stat-val" style="color:var(--blue)" id="consumedVal">0 kcal</div></div></div>
-      <div class="stat-row"><div class="stat-dot" style="background:var(--orange)"></div><div><div class="stat-name">Exercise</div><div class="stat-val" style="color:var(--orange)">0 kcal</div></div></div>
+      <div class="stat-row"><div class="stat-dot stat-dot-circle" style="background:var(--green)"></div><div><div class="stat-name">Goal</div><div class="stat-val" style="color:var(--green)">2201 kcal</div></div></div>
+      <div class="stat-row"><div class="stat-dot stat-dot-square" style="background:var(--blue)"></div><div><div class="stat-name">Consumed</div><div class="stat-val" style="color:var(--blue)" id="consumedVal">0 kcal</div></div></div>
+      <div class="stat-row"><div class="stat-dot stat-dot-diamond" style="background:var(--orange)"></div><div><div class="stat-name">Exercise</div><div class="stat-val" style="color:var(--orange)">0 kcal</div></div></div>
     </div>
   </div>
 
   <!-- MACROS -->
   <div class="macro-card">
     <div class="macro-title">Macronutrients</div>
-    <div class="macro-row"><div class="macro-name">Carbs</div><div class="macro-bar-bg"><div class="macro-bar-fill" id="carbBar" style="width:0%;background:var(--blue)"></div></div><div class="macro-val" id="carbVal" style="color:var(--blue)">0g</div></div>
-    <div class="macro-row"><div class="macro-name">Protein</div><div class="macro-bar-bg"><div class="macro-bar-fill" id="proteinBar" style="width:0%;background:var(--green)"></div></div><div class="macro-val" id="proteinVal" style="color:var(--green)">0g</div></div>
-    <div class="macro-row"><div class="macro-name">Fat</div><div class="macro-bar-bg"><div class="macro-bar-fill" id="fatBar" style="width:0%;background:var(--orange)"></div></div><div class="macro-val" id="fatVal" style="color:var(--orange)">0g</div></div>
+    <div class="macro-row"><div class="macro-name"><span class="macro-shape macro-shape-square" aria-hidden="true">■</span>Carbs</div><div class="macro-bar-bg"><div class="macro-bar-fill" id="carbBar" role="progressbar" aria-label="Carbs" aria-valuenow="0" aria-valuemin="0" aria-valuemax="220" style="width:0%;background:var(--blue)"></div></div><div class="macro-val" id="carbVal" style="color:var(--blue)">0g</div></div>
+    <div class="macro-row"><div class="macro-name"><span class="macro-shape macro-shape-triangle" aria-hidden="true">▲</span>Protein</div><div class="macro-bar-bg"><div class="macro-bar-fill" id="proteinBar" role="progressbar" aria-label="Protein" aria-valuenow="0" aria-valuemin="0" aria-valuemax="140" style="width:0%;background:var(--green)"></div></div><div class="macro-val" id="proteinVal" style="color:var(--green)">0g</div></div>
+    <div class="macro-row"><div class="macro-name"><span class="macro-shape macro-shape-circle" aria-hidden="true">●</span>Fat</div><div class="macro-bar-bg"><div class="macro-bar-fill" id="fatBar" role="progressbar" aria-label="Fat" aria-valuenow="0" aria-valuemin="0" aria-valuemax="73" style="width:0%;background:var(--orange)"></div></div><div class="macro-val" id="fatVal" style="color:var(--orange)">0g</div></div>
   </div>
 
   <div class="section-hdr"><h2>Today's Log</h2></div>
@@ -218,7 +223,7 @@
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <script src="app.js"></script>
 </body>

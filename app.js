@@ -37,11 +37,16 @@ function friendlyDate(key) {
 }
 
 // ── UI: SHOW / HIDE SCREENS ───────────────────────────────────────────────
+function hideLoadingScreen() {
+  document.getElementById('loadingScreen').classList.add('hidden');
+}
 function showLoginScreen() {
+  hideLoadingScreen();
   document.getElementById('loginScreen').style.display = 'block';
   document.getElementById('mainApp').style.display     = 'none';
 }
 function showApp(user) {
+  hideLoadingScreen();
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('mainApp').style.display     = 'block';
   // Show user avatar and name in header
@@ -464,13 +469,20 @@ function updateSummary(){
   document.getElementById('carbVal').textContent=m.carbs+'g';
   document.getElementById('proteinVal').textContent=m.protein+'g';
   document.getElementById('fatVal').textContent=m.fat+'g';
-  document.getElementById('carbBar').style.width=Math.min(m.carbs/MACRO_GOALS.carbs*100,100)+'%';
-  document.getElementById('proteinBar').style.width=Math.min(m.protein/MACRO_GOALS.protein*100,100)+'%';
-  document.getElementById('fatBar').style.width=Math.min(m.fat/MACRO_GOALS.fat*100,100)+'%';
+  const carbBar    = document.getElementById('carbBar');
+  const proteinBar = document.getElementById('proteinBar');
+  const fatBar     = document.getElementById('fatBar');
+  carbBar.style.width    = Math.min(m.carbs/MACRO_GOALS.carbs*100,100)+'%';
+  proteinBar.style.width = Math.min(m.protein/MACRO_GOALS.protein*100,100)+'%';
+  fatBar.style.width     = Math.min(m.fat/MACRO_GOALS.fat*100,100)+'%';
+  carbBar.setAttribute('aria-valuenow', m.carbs);
+  proteinBar.setAttribute('aria-valuenow', m.protein);
+  fatBar.setAttribute('aria-valuenow', m.fat);
 }
 
 function renderMeals(){
   const container=document.getElementById('mealsContainer'); if(!container) return;
+  const focusedId = document.activeElement ? document.activeElement.id : null;
   const open={};
   meals.forEach(m=>{ const el=document.getElementById('log-'+m.id); if(el) open[m.id]=el.classList.contains('open'); });
   container.innerHTML='';
@@ -511,6 +523,8 @@ function renderMeals(){
       </div>`;
     container.appendChild(card);
   });
+  // Restore focus to the same element if it still exists (e.g. food name input after adding)
+  if (focusedId) { const el = document.getElementById(focusedId); if (el) el.focus(); }
 }
 
 function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -536,6 +550,9 @@ function addManual(mealId){
 function deleteItem(mealId,idx){
   meals.find(m=>m.id===mealId).items.splice(idx,1);
   renderMeals(); openMeal(mealId); updateSummary(); scheduleSave();
+  // Delete buttons have no stable ID — move focus to the food name input for this meal
+  const input = document.getElementById('fi-'+mealId);
+  if (input) input.focus();
 }
 
 function showToast(msg,err=false){
