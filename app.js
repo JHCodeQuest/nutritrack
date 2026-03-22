@@ -284,7 +284,7 @@ async function searchFood() {
   try {
     // Open Food Facts search endpoint — searches product name, returns up to 20 results
     // We filter to products that have nutrition data (energy > 0)
-    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=20&fields=product_name,brands,nutriments,serving_size,image_thumb_url`;
+    const url = `https://uk.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=20&tagtype_0=countries&tag_contains_0=contains&tag_0=united-kingdom&fields=product_name,brands,nutriments,serving_size,countries_tags,image_thumb_url`;
     const res  = await fetch(url);
     const data = await res.json();
 
@@ -599,7 +599,7 @@ async function inlineSearch(mealId){
   const resultsEl=document.getElementById('ir-'+mealId);
   resultsEl.innerHTML='<div class="inline-loading"><span class="spinner"></span>Searching…</div>';
   try {
-    const url=`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=10&fields=product_name,brands,nutriments,serving_size`;
+    const url=`https://uk.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=10&tagtype_0=countries&tag_contains_0=contains&tag_0=united-kingdom&fields=product_name,brands,nutriments,serving_size,countries_tags`;
     const res=await fetch(url);
     const data=await res.json();
     const products=(data.products||[]).filter(p=>p.product_name&&p.nutriments&&(p.nutriments['energy-kcal_100g']||p.nutriments['energy_100g']));
