@@ -125,22 +125,59 @@
     <div class="macro-row"><div class="macro-name"><span class="macro-shape macro-shape-circle" aria-hidden="true">●</span>Fat</div><div class="macro-bar-bg"><div class="macro-bar-fill" id="fatBar" role="progressbar" aria-label="Fat" aria-valuenow="0" aria-valuemin="0" aria-valuemax="73" style="width:0%;background:var(--orange)"></div></div><div class="macro-val" id="fatVal" style="color:var(--orange)">0g</div></div>
   </div>
 
+  <!-- WATER TRACKER -->
+  <div class="water-card">
+    <div class="water-header">
+      <div>
+        <div class="water-title">💧 Water Intake</div>
+        <div class="water-sub" id="waterSub">0 / 2500 ml</div>
+      </div>
+      <div class="water-ring-wrap">
+        <svg width="52" height="52" viewBox="0 0 52 52" role="img" aria-label="Water progress">
+          <circle cx="26" cy="26" r="21" fill="none" stroke="var(--card2)" stroke-width="5"/>
+          <circle id="waterRing" cx="26" cy="26" r="21" fill="none" stroke="var(--blue)" stroke-width="5"
+            stroke-dasharray="132" stroke-dashoffset="132" stroke-linecap="round"
+            style="transition:stroke-dashoffset .6s cubic-bezier(.4,0,.2,1);transform:rotate(-90deg);transform-origin:center"/>
+        </svg>
+        <div class="water-ring-pct" id="waterPct">0%</div>
+      </div>
+    </div>
+    <div class="water-bar-bg"><div class="water-bar-fill" id="waterBar" style="width:0%"></div></div>
+    <div class="water-presets">
+      <button class="water-preset" onclick="addWater(150)">🥤 150ml</button>
+      <button class="water-preset" onclick="addWater(250)">🥛 250ml</button>
+      <button class="water-preset" onclick="addWater(330)">🫗 330ml</button>
+      <button class="water-preset" onclick="addWater(500)">🍶 500ml</button>
+      <button class="water-preset" onclick="addWater(750)">🧴 750ml</button>
+    </div>
+    <div class="water-custom-row">
+      <input class="water-custom-input" id="waterCustom" type="number" min="1" placeholder="Custom ml…" aria-label="Custom water amount in ml" onkeydown="if(event.key==='Enter')addCustomWater()"/>
+      <button class="water-custom-btn" onclick="addCustomWater()">+ Add</button>
+      <button class="water-undo-btn" onclick="undoWater()" aria-label="Undo last water entry" id="waterUndoBtn" style="display:none">↩ Undo</button>
+    </div>
+    <div class="water-log" id="waterLog"></div>
+  </div>
+
   <div class="section-hdr"><h2>Today's Log</h2></div>
   <div class="meals" id="mealsContainer"></div>
 
-  <div class="goal-card">
-    <h3>📅 My Plan</h3>
-    <div class="goal-row">
-      <div class="goal-item"><div class="gi-val" style="color:var(--green)">0.45kg</div><div class="gi-label">lose / week</div></div>
-      <div class="goal-item"><div class="gi-val" style="color:var(--blue)">2201</div><div class="gi-label">daily kcal</div></div>
-      <div class="goal-item"><div class="gi-val" style="color:var(--orange)">31 May</div><div class="gi-label">goal date</div></div>
+  <div class="goal-card" id="goalCard" onclick="openGoalSettings()" style="cursor:pointer">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h3>📅 My Plan</h3>
+      <span style="font-size:12px;color:var(--muted)">tap to edit ✏️</span>
     </div>
+    <div class="goal-row">
+      <div class="goal-item"><div class="gi-val" style="color:var(--green)" id="planRate">0.45kg</div><div class="gi-label" id="planRateLabel">lose / week</div></div>
+      <div class="goal-item"><div class="gi-val" style="color:var(--blue)" id="planKcal">2201</div><div class="gi-label">daily kcal</div></div>
+      <div class="goal-item"><div class="gi-val" style="color:var(--orange)" id="planGoalDate">—</div><div class="gi-label">goal date</div></div>
+    </div>
+    <div class="goal-details" id="goalDetails"></div>
   </div>
 
   <div class="ex-card">
     <h3>🏃 Recommended Exercises</h3>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">1–3 days/week · 60 min · Low–moderate intensity</div>
-    <div class="ex-chips">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px" id="exAdvice">1–3 days/week · 60 min · Low–moderate intensity</div>
+    <div class="ex-chips" id="exChips">
       <div class="ex-chip"><div class="ex-dot" style="background:var(--green)"></div>Walking</div>
       <div class="ex-chip"><div class="ex-dot" style="background:var(--green)"></div>Cycling</div>
       <div class="ex-chip"><div class="ex-dot" style="background:var(--blue)"></div>Swimming</div>
@@ -230,6 +267,84 @@
         </select>
         <button class="fr-add-btn" onclick="addScannedFood()">+ Add to Log</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- GOAL SETTINGS MODAL -->
+<div class="modal-overlay" id="goalModal" aria-hidden="true">
+  <div class="scanner-modal" role="dialog" aria-modal="true" aria-labelledby="goalModalTitle" style="max-height:95vh">
+    <button class="close-btn" onclick="closeGoalSettings()" aria-label="Close">✕</button>
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="goalModalTitle">My Goals</div>
+    <div class="modal-sub">Set your details to calculate a personalised daily target.</div>
+
+    <div class="goal-form">
+      <div class="gf-row">
+        <label class="gf-label" for="gfSex">Sex</label>
+        <select class="gf-select" id="gfSex">
+          <option value="male">Male</option>
+          <option value="female">Female</option>
+        </select>
+      </div>
+      <div class="gf-row">
+        <label class="gf-label" for="gfAge">Age</label>
+        <div class="gf-input-wrap"><input class="gf-input" id="gfAge" type="number" min="10" max="120" placeholder="25"/><span class="gf-unit">years</span></div>
+      </div>
+      <div class="gf-row">
+        <label class="gf-label" for="gfHeight">Height</label>
+        <div class="gf-input-wrap"><input class="gf-input" id="gfHeight" type="number" min="100" max="250" placeholder="175"/><span class="gf-unit">cm</span></div>
+      </div>
+      <div class="gf-row">
+        <label class="gf-label" for="gfWeight">Current weight</label>
+        <div class="gf-input-wrap"><input class="gf-input" id="gfWeight" type="number" min="30" max="300" step="0.1" placeholder="80"/><span class="gf-unit">kg</span></div>
+      </div>
+      <div class="gf-row">
+        <label class="gf-label" for="gfTarget">Target weight</label>
+        <div class="gf-input-wrap"><input class="gf-input" id="gfTarget" type="number" min="30" max="300" step="0.1" placeholder="72"/><span class="gf-unit">kg</span></div>
+      </div>
+      <div class="gf-row">
+        <label class="gf-label" for="gfActivity">Activity level</label>
+        <select class="gf-select" id="gfActivity">
+          <option value="1.2">Sedentary (desk job)</option>
+          <option value="1.375">Lightly active (1–3 days/wk)</option>
+          <option value="1.55" selected>Moderately active (3–5 days/wk)</option>
+          <option value="1.725">Very active (6–7 days/wk)</option>
+          <option value="1.9">Extremely active (athlete)</option>
+        </select>
+      </div>
+      <div class="gf-row">
+        <label class="gf-label" for="gfRate">Weight change rate</label>
+        <select class="gf-select" id="gfRate">
+          <option value="-1">Lose 1 kg/week</option>
+          <option value="-0.75">Lose 0.75 kg/week</option>
+          <option value="-0.5" selected>Lose 0.5 kg/week</option>
+          <option value="-0.25">Lose 0.25 kg/week</option>
+          <option value="0">Maintain weight</option>
+          <option value="0.25">Gain 0.25 kg/week</option>
+          <option value="0.5">Gain 0.5 kg/week</option>
+        </select>
+      </div>
+
+      <div class="gf-row">
+        <label class="gf-label" for="gfWater">Daily water goal</label>
+        <div class="gf-input-wrap"><input class="gf-input" id="gfWater" type="number" min="500" max="6000" step="100" placeholder="2500" onchange="updateGoalPreview()"/><span class="gf-unit">ml</span></div>
+      </div>
+
+      <div class="gf-section-label">Health conditions <span style="color:var(--muted);font-weight:400">(optional)</span></div>
+      <div class="gf-conditions" id="gfConditions">
+        <label class="gf-chip"><input type="checkbox" value="heart" onchange="updateGoalPreview()"/><span>❤️ Heart condition</span></label>
+        <label class="gf-chip"><input type="checkbox" value="pcos" onchange="updateGoalPreview()"/><span>🔄 PCOS</span></label>
+        <label class="gf-chip"><input type="checkbox" value="diabetes" onchange="updateGoalPreview()"/><span>🩸 Type 2 Diabetes</span></label>
+        <label class="gf-chip"><input type="checkbox" value="hypertension" onchange="updateGoalPreview()"/><span>💉 High blood pressure</span></label>
+        <label class="gf-chip"><input type="checkbox" value="thyroid" onchange="updateGoalPreview()"/><span>🦋 Hypothyroidism</span></label>
+        <label class="gf-chip"><input type="checkbox" value="kidney" onchange="updateGoalPreview()"/><span>🫘 Kidney disease</span></label>
+      </div>
+      <div class="gf-condition-notes" id="gfConditionNotes"></div>
+
+      <div class="gf-preview" id="gfPreview"></div>
+
+      <button class="fr-add-btn" style="width:100%;padding:13px;font-size:14px;border-radius:12px;margin-top:6px" onclick="saveGoalSettings()">Save Goals</button>
     </div>
   </div>
 </div>
