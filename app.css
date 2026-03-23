@@ -123,8 +123,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .meal-sub{font-size:12px;color:var(--muted);margin-top:1px}
 .meal-right{display:flex;align-items:center;gap:10px}
 .meal-kcal{font-family:'Syne',sans-serif;font-size:16px;font-weight:700}
-.meal-chevron{color:var(--muted);font-size:12px;transition:transform .3s}
-.meal-chevron.open{transform:rotate(180deg)}
+.meal-chevron{color:var(--muted);font-size:14px}
 .food-log{display:none;padding:0 17px 14px}
 .food-log.open{display:block}
 .food-item{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-top:1px solid var(--border)}
@@ -417,3 +416,39 @@ input,select,textarea{font-size:16px!important}
   .ring-num{font-size:19px}
   .ring-card{gap:14px}
 }
+
+/* ── MEAL DETAIL PAGE ─────────────────────────────────────────────────── */
+.meal-detail-page{position:fixed;inset:0;background:var(--bg);z-index:800;display:flex;flex-direction:column;max-width:480px;margin:0 auto;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.meal-detail-page.md-slide-in{animation:mdSlideIn .25s ease}
+@keyframes mdSlideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
+.md-header{display:flex;align-items:center;justify-content:space-between;padding:20px 16px 10px;position:sticky;top:0;background:var(--bg);z-index:10}
+.md-back-btn{background:none;border:none;color:var(--text);cursor:pointer;font-size:34px;line-height:1;padding:0;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-family:'DM Sans',sans-serif;-webkit-tap-highlight-color:transparent}
+.md-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:700}
+.md-edit-btn{background:none;border:none;color:var(--muted);cursor:pointer;width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:10px;transition:color .2s;-webkit-tap-highlight-color:transparent}
+.md-edit-btn:hover{color:var(--text)}
+.md-hero{margin:8px 14px 16px;border-radius:20px;height:190px;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.md-hero-icon{font-size:80px;line-height:1;filter:drop-shadow(0 4px 12px rgba(0,0,0,.4))}
+.md-camera-btn{position:absolute;bottom:14px;right:14px;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.35);color:rgba(255,255,255,.9);border-radius:10px;width:40px;height:40px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;-webkit-tap-highlight-color:transparent}
+.md-camera-btn:hover{background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.6)}
+.md-stats-grid{margin:0 14px 16px;background:var(--card);border:1px solid var(--border);border-radius:20px;display:grid;grid-template-columns:1fr 1fr;overflow:hidden}
+.md-stat{padding:16px 14px;text-align:center}
+.md-stat:nth-child(1){border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+.md-stat:nth-child(2){border-bottom:1px solid var(--border)}
+.md-stat:nth-child(3){border-right:1px solid var(--border)}
+.md-stat-val{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;margin-bottom:3px}
+.md-stat-label{font-size:12px;color:var(--muted)}
+.md-food-list{padding:0 14px;flex:1}
+.md-food-item{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border);cursor:pointer;-webkit-tap-highlight-color:transparent}
+.md-food-item:last-child{border-bottom:none}
+.md-food-left{flex:1;min-width:0;padding-right:12px}
+.md-food-name{font-size:15px;font-weight:600;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.md-food-sub{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.md-food-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.md-food-kcal{font-size:14px;font-weight:600;white-space:nowrap}
+.md-food-chevron{color:var(--muted);font-size:14px}
+.md-empty{padding:24px 0;text-align:center;color:var(--muted);font-size:14px}
+.md-section-hdr{font-family:'Syne',sans-serif;font-size:17px;font-weight:700;padding:14px 20px 12px;color:var(--muted)}
+.md-add-wrap{padding:0 14px 48px}
+.md-add-btn{width:100%;padding:16px;background:#ffffff;color:#0e0f11;border:none;border-radius:16px;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:700;cursor:pointer;transition:opacity .2s;-webkit-tap-highlight-color:transparent}
+.md-add-btn:hover{opacity:.88}
+:root.light .md-add-btn{background:#1a1a1e;color:#ffffff}
