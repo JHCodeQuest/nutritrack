@@ -292,14 +292,14 @@ async function searchFood() {
 
   // Cancel previous in-flight request
   if(_searchAbort) _searchAbort.abort();
-  const cacheKey='modal:'+query.toLowerCase();
+  const cacheKey='modal:'+_getOFFLocale().sub+':'+query.toLowerCase();
   const cached=_searchCache.get(cacheKey);
   let products;
   if(cached){ products=cached; }
   else {
     try {
       _searchAbort=new AbortController();
-      const url = `https://uk.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=20&tagtype_0=countries&tag_contains_0=contains&tag_0=united-kingdom&fields=product_name,brands,nutriments,serving_size,countries_tags,image_thumb_url`;
+      const url = _offSearchUrl(query, 20, ',image_thumb_url');
       const res  = await fetch(url,{signal:_searchAbort.signal});
       const data = await res.json();
       products = (data.products || []).filter(p =>
@@ -791,6 +791,77 @@ function renderRecentSearch() {
   });
 }
 
+// ── LOCALE-AWARE OPEN FOOD FACTS ─────────────────────────────────────────
+// Returns the best OFF subdomain and country tag for the user's locale.
+// Falls back to world.openfoodfacts.org with no country filter if unknown.
+function _getOFFLocale() {
+  const lang = (navigator.language || '').toLowerCase();
+  // Exact locale matches (most specific first)
+  const exact = {
+    'en-gb': { sub: 'uk',    tag: 'united-kingdom'   },
+    'en-us': { sub: 'us',    tag: 'united-states'    },
+    'en-ca': { sub: 'ca',    tag: 'canada'           },
+    'en-au': { sub: 'au',    tag: 'australia'        },
+    'en-nz': { sub: 'world', tag: 'new-zealand'      },
+    'en-ie': { sub: 'world', tag: 'ireland'          },
+    'en-za': { sub: 'world', tag: 'south-africa'     },
+    'fr-fr': { sub: 'fr',    tag: 'france'           },
+    'fr-be': { sub: 'be',    tag: 'belgium'          },
+    'fr-ch': { sub: 'ch',    tag: 'switzerland'      },
+    'fr-ca': { sub: 'ca',    tag: 'canada'           },
+    'de-de': { sub: 'de',    tag: 'germany'          },
+    'de-at': { sub: 'at',    tag: 'austria'          },
+    'de-ch': { sub: 'ch',    tag: 'switzerland'      },
+    'es-es': { sub: 'es',    tag: 'spain'            },
+    'es-mx': { sub: 'mx',    tag: 'mexico'           },
+    'es-ar': { sub: 'world', tag: 'argentina'        },
+    'it-it': { sub: 'it',    tag: 'italy'            },
+    'nl-nl': { sub: 'nl',    tag: 'the-netherlands'  },
+    'nl-be': { sub: 'be',    tag: 'belgium'          },
+    'pt-pt': { sub: 'pt',    tag: 'portugal'         },
+    'pt-br': { sub: 'br',    tag: 'brazil'           },
+    'pl-pl': { sub: 'pl',    tag: 'poland'           },
+    'ru-ru': { sub: 'ru',    tag: 'russia'           },
+    'ja-jp': { sub: 'world', tag: 'japan'            },
+    'zh-cn': { sub: 'world', tag: 'china'            },
+    'ko-kr': { sub: 'world', tag: 'south-korea'      },
+  };
+  if (exact[lang]) return exact[lang];
+  // Fall back on the country portion of the tag (e.g. 'en-in' → 'in')
+  const country = lang.split('-')[1] || '';
+  const byCountry = {
+    'gb': { sub: 'uk',    tag: 'united-kingdom'   },
+    'us': { sub: 'us',    tag: 'united-states'    },
+    'ca': { sub: 'ca',    tag: 'canada'           },
+    'au': { sub: 'au',    tag: 'australia'        },
+    'fr': { sub: 'fr',    tag: 'france'           },
+    'de': { sub: 'de',    tag: 'germany'          },
+    'at': { sub: 'at',    tag: 'austria'          },
+    'ch': { sub: 'ch',    tag: 'switzerland'      },
+    'es': { sub: 'es',    tag: 'spain'            },
+    'mx': { sub: 'mx',    tag: 'mexico'           },
+    'it': { sub: 'it',    tag: 'italy'            },
+    'nl': { sub: 'nl',    tag: 'the-netherlands'  },
+    'be': { sub: 'be',    tag: 'belgium'          },
+    'pt': { sub: 'pt',    tag: 'portugal'         },
+    'br': { sub: 'br',    tag: 'brazil'           },
+    'pl': { sub: 'pl',    tag: 'poland'           },
+    'ru': { sub: 'ru',    tag: 'russia'           },
+  };
+  return byCountry[country] || { sub: 'world', tag: null };
+}
+
+// Build the OFF search URL for a given query and page size.
+function _offSearchUrl(query, pageSize, extraFields) {
+  const { sub, tag } = _getOFFLocale();
+  const base = `https://${sub}.openfoodfacts.org/cgi/search.pl`;
+  const countryFilter = tag
+    ? `&tagtype_0=countries&tag_contains_0=contains&tag_0=${encodeURIComponent(tag)}`
+    : '';
+  const fields = `product_name,brands,nutriments,serving_size,countries_tags${extraFields || ''}`;
+  return `${base}?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=${pageSize}${countryFilter}&fields=${fields}`;
+}
+
 // ── SEARCH OPTIMISATION ─────────────────────────────────────────────────
 let _inlineDebounce = null;
 let _inlineAbort = null;
@@ -833,7 +904,7 @@ async function inlineSearch(mealId){
   // Cancel previous in-flight request
   if(_inlineAbort) _inlineAbort.abort();
   // Check cache first
-  const cacheKey='inline:'+query.toLowerCase();
+  const cacheKey='inline:'+_getOFFLocale().sub+':'+query.toLowerCase();
   const cached=_searchCache.get(cacheKey);
   let products;
   if(cached){ products=cached; }
@@ -841,7 +912,7 @@ async function inlineSearch(mealId){
     resultsEl.innerHTML='<div class="inline-loading"><span class="spinner"></span>Searching…</div>';
     try {
       _inlineAbort=new AbortController();
-      const url=`https://uk.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=10&tagtype_0=countries&tag_contains_0=contains&tag_0=united-kingdom&fields=product_name,brands,nutriments,serving_size,countries_tags`;
+      const url=_offSearchUrl(query, 10, '');
       const res=await fetch(url,{signal:_inlineAbort.signal});
       const data=await res.json();
       products=(data.products||[]).filter(p=>p.product_name&&p.nutriments&&_kcal100FromNutriments(p.nutriments)>0);
