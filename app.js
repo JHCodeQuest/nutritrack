@@ -249,6 +249,11 @@ function switchTab(tab) {
   });
   hideFoodResult();
   if (tab === 'scan') {
+    // Restore camera area in case it was hidden after a successful scan
+    const camArea = document.getElementById('cameraArea');
+    const sawBtn  = document.getElementById('scanAgainWrap');
+    if (camArea) camArea.style.display = '';
+    if (sawBtn)  sawBtn.style.display  = 'none';
     setTimeout(startQuagga, 200);
   } else {
     stopQuagga();
@@ -431,6 +436,14 @@ async function lookupBarcode(barcode, statusId) {
     };
     showFoodResult(pendingFood);
     setStatus('✅ Found! Choose meal and tap Add.','found',sid);
+    // If called from the live scan tab, stop the camera and collapse it
+    if (sid === 'scanStatus') {
+      stopQuagga();
+      const camArea = document.getElementById('cameraArea');
+      if (camArea) camArea.style.display = 'none';
+      const sawBtn = document.getElementById('scanAgainWrap');
+      if (sawBtn) sawBtn.style.display = '';
+    }
   } catch(e) { setStatus('⚠️ Network error','error',sid); lastCode=null; }
 }
 function lookupManual(){
@@ -588,6 +601,16 @@ function startQuagga(){
   });
 }
 function stopQuagga(){ if(!scannerRunning) return; try{Quagga.offDetected();Quagga.stop();}catch(e){} scannerRunning=false; }
+function scanAgain(){
+  const camArea = document.getElementById('cameraArea');
+  const sawBtn  = document.getElementById('scanAgainWrap');
+  if (camArea) camArea.style.display = '';
+  if (sawBtn)  sawBtn.style.display  = 'none';
+  hideFoodResult();
+  lastCode = null;
+  setStatus('📷 Scanning… hold barcode steady','');
+  startQuagga();
+}
 function showNoCameraNote(msg){ document.getElementById('cameraArea').innerHTML=`<div class="no-camera-note"><strong>📷 Camera Unavailable</strong>${msg}</div>`; setStatus('Use manual entry below ↓','error'); }
 
 // ── TRACKER CORE ──────────────────────────────────────────────────────────
