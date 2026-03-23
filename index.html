@@ -219,6 +219,34 @@
   </main>
 </div><!-- /mainApp -->
 
+<!-- MEAL DETAIL PAGE -->
+<div id="mealDetailPage" class="meal-detail-page" style="display:none" aria-label="Meal detail">
+  <div class="md-header">
+    <button class="md-back-btn" onclick="closeMealDetail()" aria-label="Back">&#8249;</button>
+    <div class="md-title" id="mdTitle"></div>
+    <button class="md-edit-btn" onclick="openScannerFromDetail()" aria-label="Add food">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+    </button>
+  </div>
+  <div class="md-hero" id="mdHero">
+    <div class="md-hero-icon" id="mdHeroIcon"></div>
+    <button class="md-camera-btn" onclick="openScannerFromDetail()" aria-label="Scan food">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+    </button>
+  </div>
+  <div class="md-stats-grid">
+    <div class="md-stat"><div class="md-stat-val" id="mdKcal">0</div><div class="md-stat-label">Calories</div></div>
+    <div class="md-stat"><div class="md-stat-val" id="mdCarbs">0 g</div><div class="md-stat-label">Carbs</div></div>
+    <div class="md-stat"><div class="md-stat-val" id="mdProtein">0 g</div><div class="md-stat-label">Protein</div></div>
+    <div class="md-stat"><div class="md-stat-val" id="mdFat">0 g</div><div class="md-stat-label">Fat</div></div>
+  </div>
+  <div id="mdFoodList" class="md-food-list"></div>
+  <div class="md-section-hdr">Nutrition Facts</div>
+  <div class="md-add-wrap">
+    <button class="md-add-btn" onclick="openScannerFromDetail()">Add more</button>
+  </div>
+</div>
+
 <!-- SCANNER MODAL -->
 <div class="modal-overlay" id="scannerModal" aria-hidden="true">
   <div class="scanner-modal" role="dialog" aria-modal="true" aria-labelledby="scannerModalTitle">

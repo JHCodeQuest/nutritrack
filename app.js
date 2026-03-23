@@ -7,11 +7,12 @@ const HISTORY_KEY = 'nutritrack_history';
 const HISTORY_MAX = 30;
 
 const meals = [
-  { id:'breakfast', name:'Breakfast', icon:'☀️', color:'#f59e0b', items:[] },
-  { id:'lunch',     name:'Lunch',     icon:'🥗', color:'#3ecf8e', items:[] },
-  { id:'dinner',    name:'Dinner',    icon:'🍽️', color:'#4a9eff', items:[] },
-  { id:'snacks',    name:'Snacks',    icon:'🍎', color:'#a78bfa', items:[] },
+  { id:'breakfast', name:'Breakfast', icon:'☀️', color:'#f59e0b', heroBg:'#3d2808', items:[] },
+  { id:'lunch',     name:'Lunch',     icon:'🥗', color:'#3ecf8e', heroBg:'#0d3d26', items:[] },
+  { id:'dinner',    name:'Dinner',    icon:'🍽️', color:'#4a9eff', heroBg:'#0d2640', items:[] },
+  { id:'snacks',    name:'Snacks',    icon:'🍎', color:'#a78bfa', heroBg:'#28194a', items:[] },
 ];
+let currentDetailMealId = null;
 
 let currentDateKey = todayKey();
 let dayOffset = 0;
@@ -546,7 +547,8 @@ function addScannedFood(){
     kcal100: p.kcal100, carbs100: p.carbs100, protein100: p.protein100, fat100: p.fat100, servingFactor: p.servingFactor
   };
   meals.find(m=>m.id===mealId).items.push(item);
-  renderMeals(); openMeal(mealId); updateSummary(); scheduleSave();
+  renderMeals(); updateSummary(); scheduleSave();
+  if (currentDetailMealId === mealId) renderMealDetail(mealId);
   saveToHistory(pendingFood);
   showToast(`${item.name} added!`);
   closeScanner();
@@ -572,6 +574,7 @@ function loadQuagga() {
 let releaseScannerTrap = null;
 function openScanner(mealId){
   currentScanMealId=mealId; lastCode=null; pendingFood=null;
+  const mealSel=document.getElementById('frMealSelect'); if(mealSel&&mealId) mealSel.value=mealId;
   const modal = document.getElementById('scannerModal');
   modal.classList.add('open');
   modal.removeAttribute('aria-hidden');
@@ -657,47 +660,22 @@ function updateSummary(){
 function renderMeals(){
   const container=document.getElementById('mealsContainer'); if(!container) return;
   const focusedId = document.activeElement ? document.activeElement.id : null;
-  const open={};
-  meals.forEach(m=>{ const el=document.getElementById('log-'+m.id); if(el) open[m.id]=el.classList.contains('open'); });
   container.innerHTML='';
   meals.forEach(meal=>{
     const mkcal=meal.items.reduce((s,i)=>s+i.kcal,0);
     const card=document.createElement('div'); card.className='meal-card';
     card.innerHTML=`
-      <button class="meal-header" onclick="toggleMeal('${meal.id}')"
-        aria-expanded="${open[meal.id] ? 'true' : 'false'}"
-        aria-controls="log-${meal.id}">
+      <button class="meal-header" onclick="openMealDetail('${meal.id}')"
+        aria-label="Open ${meal.name} detail">
         <div class="meal-left">
           <div class="meal-icon" style="background:${meal.color}22">${meal.icon}</div>
           <div><div class="meal-name">${meal.name}</div><div class="meal-sub">${meal.items.length} item${meal.items.length!==1?'s':''}</div></div>
         </div>
         <div class="meal-right">
           <div class="meal-kcal" style="color:${meal.color}">${mkcal} kcal</div>
-          <div class="meal-chevron${open[meal.id]?' open':''}" id="chev-${meal.id}" aria-hidden="true">▼</div>
+          <div class="meal-chevron" aria-hidden="true">▶</div>
         </div>
-      </button>
-      <div class="food-log${open[meal.id]?' open':''}" id="log-${meal.id}">
-        ${meal.items.map((item,idx)=>`
-          <div class="food-item">
-            <div>
-              <div class="food-name">${escHtml(item.name)}${item.brand?` <span style="color:var(--muted);font-size:11px;font-weight:400">· ${escHtml(item.brand)}</span>`:''}</div>
-              <div class="food-details">${item.carbs}g carbs · ${item.protein}g protein · ${item.fat}g fat</div>
-            </div>
-            <div class="food-right">
-              <div class="food-kcal">${item.kcal} kcal</div>
-              <button class="edit-btn" onclick="openEditModal('${meal.id}',${idx})" aria-label="Edit ${escHtml(item.name)}">✏️</button>
-              <button class="del-btn" onclick="deleteItem('${meal.id}',${idx})" aria-label="Delete ${escHtml(item.name)}">✕</button>
-            </div>
-          </div>`).join('')}
-        <div class="add-food-row">
-          <div class="inline-search-wrap">
-            <input class="food-input" id="fi-${meal.id}" type="text" placeholder="Search food…" aria-label="Search food for ${meal.name}" oninput="debouncedInlineSearch('${meal.id}')" onfocus="debouncedInlineSearch('${meal.id}')" onkeydown="if(event.key==='Enter'){clearTimeout(_inlineDebounce);inlineSearch('${meal.id}')}" autocomplete="off"/>
-            <button class="log-btn" onclick="inlineSearch('${meal.id}')">🔍</button>
-            <button class="scan-btn" onclick="openScanner('${meal.id}')">📷 Scan</button>
-          </div>
-          <div class="inline-results" id="ir-${meal.id}"></div>
-        </div>
-      </div>`;
+      </button>`;
     container.appendChild(card);
   });
   // Restore focus to the same element if it still exists (e.g. food name input after adding)
@@ -705,15 +683,60 @@ function renderMeals(){
 }
 
 function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function toggleMeal(id){
-  const log=document.getElementById('log-'+id); log.classList.toggle('open');
-  document.getElementById('chev-'+id).classList.toggle('open');
-  const btn=log.previousElementSibling; if(btn) btn.setAttribute('aria-expanded', log.classList.contains('open') ? 'true' : 'false');
+// Legacy stubs kept for safety (no longer called from renderMeals)
+function toggleMeal(){}
+function openMeal(){}
+
+// ── MEAL DETAIL PAGE ──────────────────────────────────────────────────────
+function openMealDetail(mealId) {
+  currentDetailMealId = mealId;
+  const page = document.getElementById('mealDetailPage');
+  renderMealDetail(mealId);
+  page.style.display = 'flex';
+  page.classList.add('md-slide-in');
+  page.addEventListener('animationend', () => page.classList.remove('md-slide-in'), {once:true});
+  document.body.style.overflow = 'hidden';
 }
-function openMeal(id){
-  const log=document.getElementById('log-'+id); log.classList.add('open');
-  document.getElementById('chev-'+id).classList.add('open');
-  const btn=log.previousElementSibling; if(btn) btn.setAttribute('aria-expanded','true');
+function closeMealDetail() {
+  const page = document.getElementById('mealDetailPage');
+  page.style.display = 'none';
+  currentDetailMealId = null;
+  document.body.style.overflow = '';
+}
+function renderMealDetail(mealId) {
+  const meal = meals.find(m => m.id === mealId);
+  if (!meal) return;
+  document.getElementById('mdTitle').textContent = meal.name;
+  const hero = document.getElementById('mdHero');
+  hero.style.background = meal.heroBg;
+  document.getElementById('mdHeroIcon').textContent = meal.icon;
+  const mkcal = meal.items.reduce((s,i)=>s+i.kcal,0);
+  const mcarbs = +meal.items.reduce((s,i)=>s+i.carbs,0).toFixed(1);
+  const mprot  = +meal.items.reduce((s,i)=>s+i.protein,0).toFixed(1);
+  const mfat   = +meal.items.reduce((s,i)=>s+i.fat,0).toFixed(1);
+  document.getElementById('mdKcal').textContent = mkcal;
+  document.getElementById('mdCarbs').textContent = mcarbs + ' g';
+  document.getElementById('mdProtein').textContent = mprot + ' g';
+  document.getElementById('mdFat').textContent = mfat + ' g';
+  const list = document.getElementById('mdFoodList');
+  if (meal.items.length === 0) {
+    list.innerHTML = '<div class="md-empty">No foods logged yet</div>';
+  } else {
+    list.innerHTML = meal.items.map((item,idx) => `
+      <div class="md-food-item" onclick="openEditModal('${meal.id}',${idx})">
+        <div class="md-food-left">
+          <div class="md-food-name">${escHtml(item.name)}</div>
+          ${item.brand ? `<div class="md-food-sub">${escHtml(item.brand)}</div>` : ''}
+        </div>
+        <div class="md-food-right">
+          <div class="md-food-kcal">${item.kcal} kcal</div>
+          <div class="md-food-chevron">›</div>
+        </div>
+      </div>`).join('');
+  }
+}
+function openScannerFromDetail() {
+  if (currentDetailMealId) openScanner(currentDetailMealId);
 }
 
 // ── FOOD HISTORY ─────────────────────────────────────────────────────────
@@ -980,9 +1003,8 @@ function addInlineFood(mealId,btn){
 }
 function deleteItem(mealId,idx){
   meals.find(m=>m.id===mealId).items.splice(idx,1);
-  renderMeals(); openMeal(mealId); updateSummary(); scheduleSave();
-  const input = document.getElementById('fi-'+mealId);
-  if (input) input.focus();
+  renderMeals(); updateSummary(); scheduleSave();
+  if (currentDetailMealId === mealId) renderMealDetail(mealId);
 }
 
 // ── EDIT FOOD ITEM ────────────────────────────────────────────────────────
@@ -1090,7 +1112,8 @@ function saveEditFood() {
     item.protein = parseFloat(document.getElementById('emRawProtein').value) || 0;
     item.fat = parseFloat(document.getElementById('emRawFat').value) || 0;
   }
-  renderMeals(); openMeal(editMealId); updateSummary(); scheduleSave();
+  renderMeals(); updateSummary(); scheduleSave();
+  if (currentDetailMealId === editMealId) renderMealDetail(editMealId);
   showToast(`${item.name} updated!`);
   closeEditModal();
 }
