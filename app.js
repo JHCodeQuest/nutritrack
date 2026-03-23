@@ -3,6 +3,8 @@ let GOAL = 2201;
 let MACRO_GOALS = { carbs:220, protein:140, fat:73 };
 const LS_KEY = 'nutritrack_v1';  // localStorage fallback key
 const GOALS_KEY = 'nutritrack_goals';
+const HISTORY_KEY = 'nutritrack_history';
+const HISTORY_MAX = 30;
 
 const meals = [
   { id:'breakfast', name:'Breakfast', icon:'☀️', color:'#f59e0b', items:[] },
@@ -247,12 +249,18 @@ function switchTab(tab) {
   });
   hideFoodResult();
   if (tab === 'scan') {
+    // Restore camera area in case it was hidden after a successful scan
+    const camArea = document.getElementById('cameraArea');
+    const sawBtn  = document.getElementById('scanAgainWrap');
+    if (camArea) camArea.style.display = '';
+    if (sawBtn)  sawBtn.style.display  = 'none';
     setTimeout(startQuagga, 200);
   } else {
     stopQuagga();
   }
   if (tab === 'search') {
     setTimeout(() => document.getElementById('foodSearchInput').focus(), 100);
+    renderRecentSearch();
   }
 }
 
@@ -272,31 +280,32 @@ document.getElementById('scannerModal').addEventListener('keydown', function(e) 
 // ── FOOD NAME SEARCH (Open Food Facts search API) ─────────────────────────
 async function searchFood() {
   const query = document.getElementById('foodSearchInput').value.trim();
-  if (!query) return;
+  if (!query) { renderRecentSearch(); return; }
 
   const statusEl  = document.getElementById('searchStatus');
   const resultsEl = document.getElementById('searchResults');
   statusEl.innerHTML = '<span class="spinner"></span>Searching…';
   statusEl.className = 'search-status';
   resultsEl.innerHTML = '';
+  const rss = document.getElementById('recentSearchSection'); if (rss) rss.style.display = 'none';
   hideFoodResult();
 
   // Cancel previous in-flight request
   if(_searchAbort) _searchAbort.abort();
-  const cacheKey='modal:'+query.toLowerCase();
+  const cacheKey='modal:'+_getOFFLocale().sub+':'+query.toLowerCase();
   const cached=_searchCache.get(cacheKey);
   let products;
   if(cached){ products=cached; }
   else {
     try {
       _searchAbort=new AbortController();
-      const url = `https://uk.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=20&tagtype_0=countries&tag_contains_0=contains&tag_0=united-kingdom&fields=product_name,brands,nutriments,serving_size,countries_tags,image_thumb_url`;
+      const url = _offSearchUrl(query, 20, ',image_thumb_url');
       const res  = await fetch(url,{signal:_searchAbort.signal});
       const data = await res.json();
       products = (data.products || []).filter(p =>
         p.product_name &&
         p.nutriments &&
-        (p.nutriments['energy-kcal_100g'] || p.nutriments['energy_100g'])
+        _kcal100FromNutriments(p.nutriments) > 0
       );
       if(_searchCache.size>=CACHE_MAX) _searchCache.delete(_searchCache.keys().next().value);
       _searchCache.set(cacheKey,products);
@@ -318,26 +327,65 @@ async function searchFood() {
     statusEl.className = 'search-status';
 
     resultsEl.innerHTML = '';
+    // Prepend matching history items
+    const histMatches = filterHistory(query);
+    if (histMatches.length) {
+      const hdr = document.createElement('div');
+      hdr.className = 'history-group-label';
+      hdr.textContent = 'Recently added';
+      resultsEl.appendChild(hdr);
+      histMatches.forEach(food => {
+        const item = document.createElement('div');
+        item.className = 'search-result-item';
+        item.dataset.food = _makeHistoryFoodObj(food);
+        item.innerHTML = `
+          <div class="sri-left">
+            <div class="sri-history-badge">Recent</div>
+            <div class="sri-name">${escHtml(food.name)}</div>
+            ${food.brand ? `<div class="sri-brand">${escHtml(food.brand)}</div>` : ''}
+          </div>
+          <div class="sri-right">
+            <div class="sri-kcal">${food.kcal} kcal</div>
+            <div class="sri-macros">${food.carbs}g C · ${food.protein}g P · ${food.fat}g F</div>
+            <button class="sri-select-btn" onclick="selectSearchResult(this)">Select</button>
+          </div>`;
+        resultsEl.appendChild(item);
+      });
+      const sep = document.createElement('div');
+      sep.className = 'history-group-label';
+      sep.textContent = 'All results';
+      resultsEl.appendChild(sep);
+    }
     products.forEach((p, idx) => {
       const n = p.nutriments || {};
-      let kcal100 = n['energy-kcal_100g'] != null ? n['energy-kcal_100g'] : (n['energy_100g'] ? n['energy_100g']/4.184 : 0);
+      const kcal100   = _kcal100FromNutriments(n);
+      const carbs100  = n['carbohydrates_100g'] || 0;
+      const protein100 = n['proteins_100g']     || 0;
+      const fat100    = n['fat_100g']           || 0;
       let factor = 1, servingLabel = 'per 100g';
       if (p.serving_size) {
         const m = p.serving_size.match(/([\d.]+)\s*g/i);
         if (m) { factor = parseFloat(m[1])/100; servingLabel = `per serving (${p.serving_size})`; }
       }
-      const kcal    = Math.round(kcal100 * factor);
-      const carbs100 = n['carbohydrates_100g']||0;
-      const protein100 = n['proteins_100g']||0;
-      const fat100 = n['fat_100g']||0;
-      const carbs   = +((carbs100)*factor).toFixed(1);
-      const protein = +((protein100)*factor).toFixed(1);
-      const fat     = +((fat100)*factor).toFixed(1);
-      const name    = p.product_name || 'Unknown';
-      const brand   = p.brands || '';
+      // Default display values in the list are always per 100g so users can compare
+      const kcal    = Math.round(kcal100);
+      const carbs   = +carbs100.toFixed(1);
+      const protein = +protein100.toFixed(1);
+      const fat     = +fat100.toFixed(1);
+      // Stored serving-size defaults for when the food card opens
+      const kcalServing    = Math.round(kcal100 * factor);
+      const carbsServing   = +(carbs100   * factor).toFixed(1);
+      const proteinServing = +(protein100 * factor).toFixed(1);
+      const fatServing     = +(fat100     * factor).toFixed(1);
+      const name  = p.product_name || 'Unknown';
+      const brand = p.brands || '';
 
-      // Build a food object with per-100g base values for flexible qty calculation
-      const foodObj = JSON.stringify({ name, brand, kcal, carbs, protein, fat, servingLabel, kcal100, carbs100, protein100, fat100, servingFactor:factor });
+      // Store per-100g base values for flexible qty calculation in the food card
+      const foodObj = JSON.stringify({
+        name, brand,
+        kcal: kcalServing, carbs: carbsServing, protein: proteinServing, fat: fatServing,
+        servingLabel, kcal100, carbs100, protein100, fat100, servingFactor: factor
+      });
 
       const item = document.createElement('div');
       item.className = 'search-result-item';
@@ -347,7 +395,7 @@ async function searchFood() {
           ${brand ? `<div class="sri-brand">${escHtml(brand)}</div>` : ''}
         </div>
         <div class="sri-right">
-          <div class="sri-kcal">${kcal} kcal</div>
+          <div class="sri-kcal">${kcal} <span class="sri-per">kcal/100g</span></div>
           <div class="sri-macros">${carbs}g C · ${protein}g P · ${fat}g F</div>
           <button class="sri-select-btn" onclick="selectSearchResult(this)">Select</button>
         </div>`;
@@ -383,7 +431,7 @@ async function lookupBarcode(barcode, statusId) {
     const data = await res.json();
     if (!data || data.status===0 || !data.product) { setStatus('❌ Product not found','error',sid); lastCode=null; return; }
     const p=data.product, n=p.nutriments||{};
-    let kcal100 = n['energy-kcal_100g'] != null ? n['energy-kcal_100g'] : (n['energy_100g']?n['energy_100g']/4.184:0);
+    let kcal100 = _kcal100FromNutriments(n);
     let factor=1, servingLabel='per 100g';
     if (p.serving_size) { const m=p.serving_size.match(/([\d.]+)\s*g/i); if(m){factor=parseFloat(m[1])/100;servingLabel=`per serving (${p.serving_size})`;} }
     const carbs100=n['carbohydrates_100g']||0, protein100=n['proteins_100g']||0, fat100=n['fat_100g']||0;
@@ -398,6 +446,14 @@ async function lookupBarcode(barcode, statusId) {
     };
     showFoodResult(pendingFood);
     setStatus('✅ Found! Choose meal and tap Add.','found',sid);
+    // If called from the live scan tab, stop the camera and collapse it
+    if (sid === 'scanStatus') {
+      stopQuagga();
+      const camArea = document.getElementById('cameraArea');
+      if (camArea) camArea.style.display = 'none';
+      const sawBtn = document.getElementById('scanAgainWrap');
+      if (sawBtn) sawBtn.style.display = '';
+    }
   } catch(e) { setStatus('⚠️ Network error','error',sid); lastCode=null; }
 }
 function lookupManual(){
@@ -486,10 +542,12 @@ function addScannedFood(){
     kcal: Math.round(p.kcal100*totalFactor),
     carbs: +(p.carbs100*totalFactor).toFixed(1),
     protein: +(p.protein100*totalFactor).toFixed(1),
-    fat: +(p.fat100*totalFactor).toFixed(1)
+    fat: +(p.fat100*totalFactor).toFixed(1),
+    kcal100: p.kcal100, carbs100: p.carbs100, protein100: p.protein100, fat100: p.fat100, servingFactor: p.servingFactor
   };
   meals.find(m=>m.id===mealId).items.push(item);
   renderMeals(); openMeal(mealId); updateSummary(); scheduleSave();
+  saveToHistory(pendingFood);
   showToast(`${item.name} added!`);
   closeScanner();
 }
@@ -521,6 +579,7 @@ function openScanner(mealId){
   document.getElementById('foodSearchInput').value='';
   document.getElementById('searchResults').innerHTML='';
   document.getElementById('searchStatus').textContent='';
+  const rss = document.getElementById('recentSearchSection'); if (rss) rss.style.display = 'none';
   hideFoodResult();
   switchTab('scan');
   releaseScannerTrap = trapFocus(modal.querySelector('.scanner-modal'), closeScanner);
@@ -544,6 +603,7 @@ function startQuagga(){
     scannerRunning=true; Quagga.start(); setStatus('📷 Scanning… hold barcode steady','');
   });
   Quagga.onDetected(function(result){
+    if(pendingFood) return; // food already found — don't wipe it if camera moves
     const code=result.codeResult.code; if(!code||code===lastCode) return;
     const err=result.codeResult.startInfo?result.codeResult.startInfo.error:1;
     if(err>0.3) return;
@@ -551,6 +611,16 @@ function startQuagga(){
   });
 }
 function stopQuagga(){ if(!scannerRunning) return; try{Quagga.offDetected();Quagga.stop();}catch(e){} scannerRunning=false; }
+function scanAgain(){
+  const camArea = document.getElementById('cameraArea');
+  const sawBtn  = document.getElementById('scanAgainWrap');
+  if (camArea) camArea.style.display = '';
+  if (sawBtn)  sawBtn.style.display  = 'none';
+  hideFoodResult();
+  lastCode = null;
+  setStatus('📷 Scanning… hold barcode steady','');
+  startQuagga();
+}
 function showNoCameraNote(msg){ document.getElementById('cameraArea').innerHTML=`<div class="no-camera-note"><strong>📷 Camera Unavailable</strong>${msg}</div>`; setStatus('Use manual entry below ↓','error'); }
 
 // ── TRACKER CORE ──────────────────────────────────────────────────────────
@@ -615,12 +685,13 @@ function renderMeals(){
             </div>
             <div class="food-right">
               <div class="food-kcal">${item.kcal} kcal</div>
+              <button class="edit-btn" onclick="openEditModal('${meal.id}',${idx})" aria-label="Edit ${escHtml(item.name)}">✏️</button>
               <button class="del-btn" onclick="deleteItem('${meal.id}',${idx})" aria-label="Delete ${escHtml(item.name)}">✕</button>
             </div>
           </div>`).join('')}
         <div class="add-food-row">
           <div class="inline-search-wrap">
-            <input class="food-input" id="fi-${meal.id}" type="text" placeholder="Search food…" aria-label="Search food for ${meal.name}" oninput="debouncedInlineSearch('${meal.id}')" onkeydown="if(event.key==='Enter'){clearTimeout(_inlineDebounce);inlineSearch('${meal.id}')}" autocomplete="off"/>
+            <input class="food-input" id="fi-${meal.id}" type="text" placeholder="Search food…" aria-label="Search food for ${meal.name}" oninput="debouncedInlineSearch('${meal.id}')" onfocus="debouncedInlineSearch('${meal.id}')" onkeydown="if(event.key==='Enter'){clearTimeout(_inlineDebounce);inlineSearch('${meal.id}')}" autocomplete="off"/>
             <button class="log-btn" onclick="inlineSearch('${meal.id}')">🔍</button>
             <button class="scan-btn" onclick="openScanner('${meal.id}')">📷 Scan</button>
           </div>
@@ -645,6 +716,152 @@ function openMeal(id){
   const btn=log.previousElementSibling; if(btn) btn.setAttribute('aria-expanded','true');
 }
 
+// ── FOOD HISTORY ─────────────────────────────────────────────────────────
+function saveToHistory(food) {
+  try {
+    const history = getHistory();
+    const key = (food.name + '|' + (food.brand || '')).toLowerCase();
+    const filtered = history.filter(h => (h.name + '|' + (h.brand || '')).toLowerCase() !== key);
+    filtered.unshift({
+      name: food.name, brand: food.brand || '',
+      kcal: food.kcal, carbs: food.carbs, protein: food.protein, fat: food.fat,
+      servingLabel: food.servingLabel, kcal100: food.kcal100,
+      carbs100: food.carbs100, protein100: food.protein100, fat100: food.fat100,
+      servingFactor: food.servingFactor, addedAt: Date.now()
+    });
+    if (filtered.length > HISTORY_MAX) filtered.length = HISTORY_MAX;
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(filtered));
+  } catch(e) {}
+}
+function getHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch(e) { return []; }
+}
+function filterHistory(query) {
+  const history = getHistory();
+  if (!query) return history.slice(0, 8);
+  const q = query.toLowerCase();
+  return history.filter(h => h.name.toLowerCase().includes(q) || (h.brand && h.brand.toLowerCase().includes(q))).slice(0, 5);
+}
+
+// Robust kcal-per-100g extraction from Open Food Facts nutriments.
+// Prefers the dedicated kcal field; falls back through explicit kJ fields.
+function _kcal100FromNutriments(n) {
+  if (n['energy-kcal_100g'] > 0)  return n['energy-kcal_100g'];
+  if (n['energy-kj_100g']   > 0)  return n['energy-kj_100g']   / 4.184;
+  if (n['energy_100g']      > 0)  return n['energy_100g']       / 4.184;
+  return 0;
+}
+
+function _makeHistoryFoodObj(food) {
+  return JSON.stringify({
+    name: food.name, brand: food.brand, kcal: food.kcal, carbs: food.carbs,
+    protein: food.protein, fat: food.fat, servingLabel: food.servingLabel,
+    kcal100: food.kcal100, carbs100: food.carbs100, protein100: food.protein100,
+    fat100: food.fat100, servingFactor: food.servingFactor
+  });
+}
+
+// Renders recent foods into the "recentSearchSection" in the search pane
+function renderRecentSearch() {
+  const section = document.getElementById('recentSearchSection');
+  const list = document.getElementById('recentSearchList');
+  if (!section || !list) return;
+  const query = (document.getElementById('foodSearchInput') || {}).value || '';
+  if (query.trim()) { section.style.display = 'none'; return; }
+  const history = getHistory();
+  if (!history.length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  list.innerHTML = '';
+  history.slice(0, 8).forEach(food => {
+    const item = document.createElement('div');
+    item.className = 'search-result-item';
+    item.dataset.food = _makeHistoryFoodObj(food);
+    item.innerHTML = `
+      <div class="sri-left">
+        <div class="sri-history-badge">Recent</div>
+        <div class="sri-name">${escHtml(food.name)}</div>
+        ${food.brand ? `<div class="sri-brand">${escHtml(food.brand)}</div>` : ''}
+      </div>
+      <div class="sri-right">
+        <div class="sri-kcal">${food.kcal} kcal</div>
+        <div class="sri-macros">${food.carbs}g C · ${food.protein}g P · ${food.fat}g F</div>
+        <button class="sri-select-btn" onclick="selectSearchResult(this)">Select</button>
+      </div>`;
+    list.appendChild(item);
+  });
+}
+
+// ── LOCALE-AWARE OPEN FOOD FACTS ─────────────────────────────────────────
+// Returns the best OFF subdomain and country tag for the user's locale.
+// Falls back to world.openfoodfacts.org with no country filter if unknown.
+function _getOFFLocale() {
+  const lang = (navigator.language || '').toLowerCase();
+  // Exact locale matches (most specific first)
+  const exact = {
+    'en-gb': { sub: 'uk',    tag: 'united-kingdom'   },
+    'en-us': { sub: 'us',    tag: 'united-states'    },
+    'en-ca': { sub: 'ca',    tag: 'canada'           },
+    'en-au': { sub: 'au',    tag: 'australia'        },
+    'en-nz': { sub: 'world', tag: 'new-zealand'      },
+    'en-ie': { sub: 'world', tag: 'ireland'          },
+    'en-za': { sub: 'world', tag: 'south-africa'     },
+    'fr-fr': { sub: 'fr',    tag: 'france'           },
+    'fr-be': { sub: 'be',    tag: 'belgium'          },
+    'fr-ch': { sub: 'ch',    tag: 'switzerland'      },
+    'fr-ca': { sub: 'ca',    tag: 'canada'           },
+    'de-de': { sub: 'de',    tag: 'germany'          },
+    'de-at': { sub: 'at',    tag: 'austria'          },
+    'de-ch': { sub: 'ch',    tag: 'switzerland'      },
+    'es-es': { sub: 'es',    tag: 'spain'            },
+    'es-mx': { sub: 'mx',    tag: 'mexico'           },
+    'es-ar': { sub: 'world', tag: 'argentina'        },
+    'it-it': { sub: 'it',    tag: 'italy'            },
+    'nl-nl': { sub: 'nl',    tag: 'the-netherlands'  },
+    'nl-be': { sub: 'be',    tag: 'belgium'          },
+    'pt-pt': { sub: 'pt',    tag: 'portugal'         },
+    'pt-br': { sub: 'br',    tag: 'brazil'           },
+    'pl-pl': { sub: 'pl',    tag: 'poland'           },
+    'ru-ru': { sub: 'ru',    tag: 'russia'           },
+    'ja-jp': { sub: 'world', tag: 'japan'            },
+    'zh-cn': { sub: 'world', tag: 'china'            },
+    'ko-kr': { sub: 'world', tag: 'south-korea'      },
+  };
+  if (exact[lang]) return exact[lang];
+  // Fall back on the country portion of the tag (e.g. 'en-in' → 'in')
+  const country = lang.split('-')[1] || '';
+  const byCountry = {
+    'gb': { sub: 'uk',    tag: 'united-kingdom'   },
+    'us': { sub: 'us',    tag: 'united-states'    },
+    'ca': { sub: 'ca',    tag: 'canada'           },
+    'au': { sub: 'au',    tag: 'australia'        },
+    'fr': { sub: 'fr',    tag: 'france'           },
+    'de': { sub: 'de',    tag: 'germany'          },
+    'at': { sub: 'at',    tag: 'austria'          },
+    'ch': { sub: 'ch',    tag: 'switzerland'      },
+    'es': { sub: 'es',    tag: 'spain'            },
+    'mx': { sub: 'mx',    tag: 'mexico'           },
+    'it': { sub: 'it',    tag: 'italy'            },
+    'nl': { sub: 'nl',    tag: 'the-netherlands'  },
+    'be': { sub: 'be',    tag: 'belgium'          },
+    'pt': { sub: 'pt',    tag: 'portugal'         },
+    'br': { sub: 'br',    tag: 'brazil'           },
+    'pl': { sub: 'pl',    tag: 'poland'           },
+    'ru': { sub: 'ru',    tag: 'russia'           },
+  };
+  return byCountry[country] || { sub: 'world', tag: null };
+}
+
+// Build the OFF search URL for a given query and page size.
+function _offSearchUrl(query, pageSize, extraFields) {
+  const { sub, tag } = _getOFFLocale();
+  const base = `https://${sub}.openfoodfacts.org/cgi/search.pl`;
+  const countryFilter = tag
+    ? `&tagtype_0=countries&tag_contains_0=contains&tag_0=${encodeURIComponent(tag)}`
+    : '';
+  const fields = `product_name,brands,nutriments,serving_size,countries_tags${extraFields || ''}`;
+  return `${base}?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=${pageSize}${countryFilter}&fields=${fields}`;
+}
+
 // ── SEARCH OPTIMISATION ─────────────────────────────────────────────────
 let _inlineDebounce = null;
 let _inlineAbort = null;
@@ -655,7 +872,26 @@ const CACHE_MAX = 50;
 function debouncedInlineSearch(mealId) {
   clearTimeout(_inlineDebounce);
   const query = document.getElementById('fi-'+mealId).value.trim();
-  if (!query) { document.getElementById('ir-'+mealId).innerHTML = ''; return; }
+  if (!query) {
+    const resultsEl = document.getElementById('ir-'+mealId);
+    const history = getHistory();
+    if (!history.length) { resultsEl.innerHTML = ''; return; }
+    resultsEl.innerHTML = '';
+    history.slice(0, 6).forEach(food => {
+      const item = document.createElement('div');
+      item.className = 'inline-result-item';
+      item.dataset.food = _makeHistoryFoodObj(food);
+      item.innerHTML = `
+        <div class="iri-left">
+          <div class="iri-history-badge">Recent</div>
+          <div class="iri-name">${escHtml(food.name)}</div>
+          <div class="iri-meta">${food.brand ? escHtml(food.brand)+' · ' : ''}${food.kcal} kcal · ${food.carbs}g C · ${food.protein}g P · ${food.fat}g F</div>
+        </div>
+        <button class="iri-add-btn" onclick="addInlineFood('${mealId}',this)" aria-label="Quick add ${escHtml(food.name)}">+</button>`;
+      resultsEl.appendChild(item);
+    });
+    return;
+  }
   if (query.length < 2) return;
   _inlineDebounce = setTimeout(() => inlineSearch(mealId), 300);
 }
@@ -668,7 +904,7 @@ async function inlineSearch(mealId){
   // Cancel previous in-flight request
   if(_inlineAbort) _inlineAbort.abort();
   // Check cache first
-  const cacheKey='inline:'+query.toLowerCase();
+  const cacheKey='inline:'+_getOFFLocale().sub+':'+query.toLowerCase();
   const cached=_searchCache.get(cacheKey);
   let products;
   if(cached){ products=cached; }
@@ -676,22 +912,37 @@ async function inlineSearch(mealId){
     resultsEl.innerHTML='<div class="inline-loading"><span class="spinner"></span>Searching…</div>';
     try {
       _inlineAbort=new AbortController();
-      const url=`https://uk.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=10&tagtype_0=countries&tag_contains_0=contains&tag_0=united-kingdom&fields=product_name,brands,nutriments,serving_size,countries_tags`;
+      const url=_offSearchUrl(query, 10, '');
       const res=await fetch(url,{signal:_inlineAbort.signal});
       const data=await res.json();
-      products=(data.products||[]).filter(p=>p.product_name&&p.nutriments&&(p.nutriments['energy-kcal_100g']||p.nutriments['energy_100g']));
+      products=(data.products||[]).filter(p=>p.product_name&&p.nutriments&&_kcal100FromNutriments(p.nutriments)>0);
       if(_searchCache.size>=CACHE_MAX) _searchCache.delete(_searchCache.keys().next().value);
       _searchCache.set(cacheKey,products);
     } catch(e){ if(e.name==='AbortError') return; resultsEl.innerHTML='<div class="inline-no-results">Network error</div>'; return; }
   }
-    if(!products.length){ resultsEl.innerHTML='<div class="inline-no-results">No results found</div>'; return; }
+    const histInline = filterHistory(query);
+    if(!products.length && !histInline.length){ resultsEl.innerHTML='<div class="inline-no-results">No results found</div>'; return; }
     resultsEl.innerHTML='';
+    // Prepend history matches
+    histInline.forEach(food => {
+      const item = document.createElement('div');
+      item.className = 'inline-result-item';
+      item.dataset.food = _makeHistoryFoodObj(food);
+      item.innerHTML = `
+        <div class="iri-left">
+          <div class="iri-history-badge">Recent</div>
+          <div class="iri-name">${escHtml(food.name)}</div>
+          <div class="iri-meta">${food.brand ? escHtml(food.brand)+' · ' : ''}${food.kcal} kcal · ${food.carbs}g C · ${food.protein}g P · ${food.fat}g F</div>
+        </div>
+        <button class="iri-add-btn" onclick="addInlineFood('${mealId}',this)" aria-label="Quick add ${escHtml(food.name)}">+</button>`;
+      resultsEl.appendChild(item);
+    });
     products.forEach(p=>{
       const n=p.nutriments||{};
-      let kcal100=n['energy-kcal_100g']!=null?n['energy-kcal_100g']:(n['energy_100g']?n['energy_100g']/4.184:0);
+      const kcal100=_kcal100FromNutriments(n);
+      const carbs100=n['carbohydrates_100g']||0,protein100=n['proteins_100g']||0,fat100=n['fat_100g']||0;
       let factor=1,servingLabel='per 100g';
       if(p.serving_size){const m=p.serving_size.match(/([\d.]+)\s*g/i);if(m){factor=parseFloat(m[1])/100;servingLabel=`per serving (${p.serving_size})`;}}
-      const carbs100=n['carbohydrates_100g']||0,protein100=n['proteins_100g']||0,fat100=n['fat_100g']||0;
       const food={
         name:p.product_name||'Unknown',
         brand:p.brands||'',
@@ -704,10 +955,11 @@ async function inlineSearch(mealId){
       const item=document.createElement('div');
       item.className='inline-result-item';
       item.dataset.food=JSON.stringify(food);
+      // Show per-100g in the list so values are consistent and comparable
       item.innerHTML=`
         <div class="iri-left">
           <div class="iri-name">${escHtml(food.name)}</div>
-          <div class="iri-meta">${food.brand?escHtml(food.brand)+' · ':''}${food.kcal} kcal · ${food.carbs}g C · ${food.protein}g P · ${food.fat}g F</div>
+          <div class="iri-meta">${food.brand?escHtml(food.brand)+' · ':''}${Math.round(kcal100)} kcal/100g · ${carbs100.toFixed(1)}g C · ${protein100.toFixed(1)}g P · ${fat100.toFixed(1)}g F</div>
         </div>
         <button class="iri-add-btn" onclick="addInlineFood('${mealId}',this)">+</button>`;
       resultsEl.appendChild(item);
@@ -733,6 +985,116 @@ function deleteItem(mealId,idx){
   if (input) input.focus();
 }
 
+// ── EDIT FOOD ITEM ────────────────────────────────────────────────────────
+let editMealId = null;
+let editItemIdx = null;
+let releaseEditTrap = null;
+
+function openEditModal(mealId, idx) {
+  editMealId = mealId;
+  editItemIdx = idx;
+  const item = meals.find(m => m.id === mealId).items[idx];
+  document.getElementById('emName').textContent = item.name;
+  document.getElementById('emBrand').textContent = item.brand || '';
+  const hasBaseData = item.kcal100 != null;
+  document.getElementById('emServingControls').style.display = hasBaseData ? '' : 'none';
+  document.getElementById('emRawControls').style.display = hasBaseData ? 'none' : '';
+  if (hasBaseData) {
+    const unitSel = document.getElementById('emUnit');
+    const servingOpt = unitSel.querySelector('option[value="serving"]');
+    if (item.servingFactor && item.servingFactor !== 1) {
+      servingOpt.style.display = ''; unitSel.value = 'serving';
+    } else {
+      servingOpt.style.display = 'none'; unitSel.value = '100g';
+    }
+    document.getElementById('emGrams').style.display = 'none';
+    document.getElementById('emGrams').value = '';
+    document.getElementById('emQty').value = 1;
+    updateEditPreview();
+  } else {
+    document.getElementById('emRawKcal').value = item.kcal;
+    document.getElementById('emRawCarbs').value = item.carbs;
+    document.getElementById('emRawProtein').value = item.protein;
+    document.getElementById('emRawFat').value = item.fat;
+  }
+  const modal = document.getElementById('editModal');
+  modal.classList.add('open'); modal.removeAttribute('aria-hidden');
+  releaseEditTrap = trapFocus(modal.querySelector('.scanner-modal'), closeEditModal);
+}
+
+function closeEditModal() {
+  const modal = document.getElementById('editModal');
+  modal.classList.remove('open'); modal.setAttribute('aria-hidden', 'true');
+  if (releaseEditTrap) { releaseEditTrap(); releaseEditTrap = null; }
+}
+
+function updateEditPreview() {
+  if (editMealId === null || editItemIdx === null) return;
+  const item = meals.find(m => m.id === editMealId).items[editItemIdx];
+  if (!item || item.kcal100 == null) return;
+  const qty = parseFloat(document.getElementById('emQty').value) || 1;
+  const unit = document.getElementById('emUnit').value;
+  const gramInput = document.getElementById('emGrams');
+  const qtyLabel = document.getElementById('emQtyLabel');
+  gramInput.style.display = unit === 'custom' ? 'inline-block' : 'none';
+  if (unit === 'serving') qtyLabel.textContent = 'Servings';
+  else if (unit === '100g') qtyLabel.textContent = 'Qty (x100g)';
+  else qtyLabel.textContent = 'Qty';
+  let baseFactor;
+  if (unit === 'serving') baseFactor = item.servingFactor || 1;
+  else if (unit === 'custom') baseFactor = (parseFloat(gramInput.value) || 0) / 100;
+  else baseFactor = 1;
+  const totalFactor = baseFactor * qty;
+  document.getElementById('emKcal').textContent = Math.round(item.kcal100 * totalFactor);
+  document.getElementById('emCarbs').textContent = +(item.carbs100 * totalFactor).toFixed(1);
+  document.getElementById('emProtein').textContent = +(item.protein100 * totalFactor).toFixed(1);
+  document.getElementById('emFat').textContent = +(item.fat100 * totalFactor).toFixed(1);
+}
+
+function changeEditQty(delta) {
+  const input = document.getElementById('emQty');
+  let val = parseFloat(input.value) || 1;
+  val = Math.max(0.5, Math.round((val + delta) * 2) / 2);
+  input.value = val;
+  updateEditPreview();
+}
+
+function saveEditFood() {
+  const meal = meals.find(m => m.id === editMealId);
+  if (!meal) return;
+  const item = meal.items[editItemIdx];
+  if (!item) return;
+  if (item.kcal100 != null) {
+    const qty = parseFloat(document.getElementById('emQty').value) || 1;
+    const unit = document.getElementById('emUnit').value;
+    const gramInput = document.getElementById('emGrams');
+    let baseFactor;
+    if (unit === 'serving') baseFactor = item.servingFactor || 1;
+    else if (unit === 'custom') baseFactor = (parseFloat(gramInput.value) || 0) / 100;
+    else baseFactor = 1;
+    const totalFactor = baseFactor * qty;
+    // Strip any existing serving suffix then re-add
+    const baseName = item.name.replace(/ \(x[\d.]+\)$/, '').replace(/ \([\d.]+ x \d+g\)$/, '').replace(/ \(\d+g\)$/, '');
+    let newLabel = baseName;
+    if (unit === 'custom') { const g = parseFloat(gramInput.value) || 0; newLabel += qty !== 1 ? ` (${qty} x ${g}g)` : ` (${g}g)`; }
+    else if (unit === 'serving' && qty !== 1) newLabel += ` (x${qty})`;
+    else if (unit === '100g' && qty !== 1) newLabel += ` (x${qty})`;
+    item.name = newLabel;
+    item.kcal = Math.round(item.kcal100 * totalFactor);
+    item.carbs = +(item.carbs100 * totalFactor).toFixed(1);
+    item.protein = +(item.protein100 * totalFactor).toFixed(1);
+    item.fat = +(item.fat100 * totalFactor).toFixed(1);
+  } else {
+    item.kcal = parseFloat(document.getElementById('emRawKcal').value) || 0;
+    item.carbs = parseFloat(document.getElementById('emRawCarbs').value) || 0;
+    item.protein = parseFloat(document.getElementById('emRawProtein').value) || 0;
+    item.fat = parseFloat(document.getElementById('emRawFat').value) || 0;
+  }
+  renderMeals(); openMeal(editMealId); updateSummary(); scheduleSave();
+  showToast(`${item.name} updated!`);
+  closeEditModal();
+}
+
 function showToast(msg,err=false){
   const t=document.getElementById('toast');
   t.textContent=msg; t.className='toast show'+(err?' err':'');
@@ -742,6 +1104,7 @@ function showToast(msg,err=false){
 // Modal backdrop close
 document.getElementById('scannerModal').addEventListener('click',function(e){if(e.target===this)closeScanner();});
 document.getElementById('confirmOverlay').addEventListener('click',function(e){if(e.target===this)closeConfirm();});
+document.getElementById('editModal').addEventListener('click',function(e){if(e.target===this)closeEditModal();});
 
 // ── WATER TRACKER ────────────────────────────────────────────────────────
 let WATER_GOAL = 2500; // ml
