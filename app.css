@@ -211,7 +211,8 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .sri-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sri-brand{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sri-right{display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0;gap:2px}
-.sri-kcal{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--green)}
+.sri-kcal{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--green);display:flex;align-items:baseline;gap:3px}
+.sri-per{font-family:'DM Sans',sans-serif;font-size:10px;font-weight:500;color:var(--muted)}
 .sri-macros{font-size:12px;color:var(--muted);white-space:nowrap}
 .sri-select-btn{background:var(--green);border:none;border-radius:8px;padding:5px 10px;color:#0e0f11;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:4px}
 .no-results{text-align:center;padding:20px;color:var(--muted);font-size:13px}

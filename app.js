@@ -305,7 +305,7 @@ async function searchFood() {
       products = (data.products || []).filter(p =>
         p.product_name &&
         p.nutriments &&
-        (p.nutriments['energy-kcal_100g'] || p.nutriments['energy_100g'])
+        _kcal100FromNutriments(p.nutriments) > 0
       );
       if(_searchCache.size>=CACHE_MAX) _searchCache.delete(_searchCache.keys().next().value);
       _searchCache.set(cacheKey,products);
@@ -358,24 +358,34 @@ async function searchFood() {
     }
     products.forEach((p, idx) => {
       const n = p.nutriments || {};
-      let kcal100 = n['energy-kcal_100g'] != null ? n['energy-kcal_100g'] : (n['energy_100g'] ? n['energy_100g']/4.184 : 0);
+      const kcal100   = _kcal100FromNutriments(n);
+      const carbs100  = n['carbohydrates_100g'] || 0;
+      const protein100 = n['proteins_100g']     || 0;
+      const fat100    = n['fat_100g']           || 0;
       let factor = 1, servingLabel = 'per 100g';
       if (p.serving_size) {
         const m = p.serving_size.match(/([\d.]+)\s*g/i);
         if (m) { factor = parseFloat(m[1])/100; servingLabel = `per serving (${p.serving_size})`; }
       }
-      const kcal    = Math.round(kcal100 * factor);
-      const carbs100 = n['carbohydrates_100g']||0;
-      const protein100 = n['proteins_100g']||0;
-      const fat100 = n['fat_100g']||0;
-      const carbs   = +((carbs100)*factor).toFixed(1);
-      const protein = +((protein100)*factor).toFixed(1);
-      const fat     = +((fat100)*factor).toFixed(1);
-      const name    = p.product_name || 'Unknown';
-      const brand   = p.brands || '';
+      // Default display values in the list are always per 100g so users can compare
+      const kcal    = Math.round(kcal100);
+      const carbs   = +carbs100.toFixed(1);
+      const protein = +protein100.toFixed(1);
+      const fat     = +fat100.toFixed(1);
+      // Stored serving-size defaults for when the food card opens
+      const kcalServing    = Math.round(kcal100 * factor);
+      const carbsServing   = +(carbs100   * factor).toFixed(1);
+      const proteinServing = +(protein100 * factor).toFixed(1);
+      const fatServing     = +(fat100     * factor).toFixed(1);
+      const name  = p.product_name || 'Unknown';
+      const brand = p.brands || '';
 
-      // Build a food object with per-100g base values for flexible qty calculation
-      const foodObj = JSON.stringify({ name, brand, kcal, carbs, protein, fat, servingLabel, kcal100, carbs100, protein100, fat100, servingFactor:factor });
+      // Store per-100g base values for flexible qty calculation in the food card
+      const foodObj = JSON.stringify({
+        name, brand,
+        kcal: kcalServing, carbs: carbsServing, protein: proteinServing, fat: fatServing,
+        servingLabel, kcal100, carbs100, protein100, fat100, servingFactor: factor
+      });
 
       const item = document.createElement('div');
       item.className = 'search-result-item';
@@ -385,7 +395,7 @@ async function searchFood() {
           ${brand ? `<div class="sri-brand">${escHtml(brand)}</div>` : ''}
         </div>
         <div class="sri-right">
-          <div class="sri-kcal">${kcal} kcal</div>
+          <div class="sri-kcal">${kcal} <span class="sri-per">kcal/100g</span></div>
           <div class="sri-macros">${carbs}g C · ${protein}g P · ${fat}g F</div>
           <button class="sri-select-btn" onclick="selectSearchResult(this)">Select</button>
         </div>`;
@@ -421,7 +431,7 @@ async function lookupBarcode(barcode, statusId) {
     const data = await res.json();
     if (!data || data.status===0 || !data.product) { setStatus('❌ Product not found','error',sid); lastCode=null; return; }
     const p=data.product, n=p.nutriments||{};
-    let kcal100 = n['energy-kcal_100g'] != null ? n['energy-kcal_100g'] : (n['energy_100g']?n['energy_100g']/4.184:0);
+    let kcal100 = _kcal100FromNutriments(n);
     let factor=1, servingLabel='per 100g';
     if (p.serving_size) { const m=p.serving_size.match(/([\d.]+)\s*g/i); if(m){factor=parseFloat(m[1])/100;servingLabel=`per serving (${p.serving_size})`;} }
     const carbs100=n['carbohydrates_100g']||0, protein100=n['proteins_100g']||0, fat100=n['fat_100g']||0;
@@ -733,6 +743,15 @@ function filterHistory(query) {
   return history.filter(h => h.name.toLowerCase().includes(q) || (h.brand && h.brand.toLowerCase().includes(q))).slice(0, 5);
 }
 
+// Robust kcal-per-100g extraction from Open Food Facts nutriments.
+// Prefers the dedicated kcal field; falls back through explicit kJ fields.
+function _kcal100FromNutriments(n) {
+  if (n['energy-kcal_100g'] > 0)  return n['energy-kcal_100g'];
+  if (n['energy-kj_100g']   > 0)  return n['energy-kj_100g']   / 4.184;
+  if (n['energy_100g']      > 0)  return n['energy_100g']       / 4.184;
+  return 0;
+}
+
 function _makeHistoryFoodObj(food) {
   return JSON.stringify({
     name: food.name, brand: food.brand, kcal: food.kcal, carbs: food.carbs,
@@ -825,7 +844,7 @@ async function inlineSearch(mealId){
       const url=`https://uk.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=10&tagtype_0=countries&tag_contains_0=contains&tag_0=united-kingdom&fields=product_name,brands,nutriments,serving_size,countries_tags`;
       const res=await fetch(url,{signal:_inlineAbort.signal});
       const data=await res.json();
-      products=(data.products||[]).filter(p=>p.product_name&&p.nutriments&&(p.nutriments['energy-kcal_100g']||p.nutriments['energy_100g']));
+      products=(data.products||[]).filter(p=>p.product_name&&p.nutriments&&_kcal100FromNutriments(p.nutriments)>0);
       if(_searchCache.size>=CACHE_MAX) _searchCache.delete(_searchCache.keys().next().value);
       _searchCache.set(cacheKey,products);
     } catch(e){ if(e.name==='AbortError') return; resultsEl.innerHTML='<div class="inline-no-results">Network error</div>'; return; }
@@ -849,10 +868,10 @@ async function inlineSearch(mealId){
     });
     products.forEach(p=>{
       const n=p.nutriments||{};
-      let kcal100=n['energy-kcal_100g']!=null?n['energy-kcal_100g']:(n['energy_100g']?n['energy_100g']/4.184:0);
+      const kcal100=_kcal100FromNutriments(n);
+      const carbs100=n['carbohydrates_100g']||0,protein100=n['proteins_100g']||0,fat100=n['fat_100g']||0;
       let factor=1,servingLabel='per 100g';
       if(p.serving_size){const m=p.serving_size.match(/([\d.]+)\s*g/i);if(m){factor=parseFloat(m[1])/100;servingLabel=`per serving (${p.serving_size})`;}}
-      const carbs100=n['carbohydrates_100g']||0,protein100=n['proteins_100g']||0,fat100=n['fat_100g']||0;
       const food={
         name:p.product_name||'Unknown',
         brand:p.brands||'',
@@ -865,10 +884,11 @@ async function inlineSearch(mealId){
       const item=document.createElement('div');
       item.className='inline-result-item';
       item.dataset.food=JSON.stringify(food);
+      // Show per-100g in the list so values are consistent and comparable
       item.innerHTML=`
         <div class="iri-left">
           <div class="iri-name">${escHtml(food.name)}</div>
-          <div class="iri-meta">${food.brand?escHtml(food.brand)+' · ':''}${food.kcal} kcal · ${food.carbs}g C · ${food.protein}g P · ${food.fat}g F</div>
+          <div class="iri-meta">${food.brand?escHtml(food.brand)+' · ':''}${Math.round(kcal100)} kcal/100g · ${carbs100.toFixed(1)}g C · ${protein100.toFixed(1)}g P · ${fat100.toFixed(1)}g F</div>
         </div>
         <button class="iri-add-btn" onclick="addInlineFood('${mealId}',this)">+</button>`;
       resultsEl.appendChild(item);
