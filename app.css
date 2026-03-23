@@ -452,3 +452,12 @@ input,select,textarea{font-size:16px!important}
 .md-add-btn{width:100%;padding:16px;background:#ffffff;color:#0e0f11;border:none;border-radius:16px;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:700;cursor:pointer;transition:opacity .2s;-webkit-tap-highlight-color:transparent}
 .md-add-btn:hover{opacity:.88}
 :root.light .md-add-btn{background:#1a1a1e;color:#ffffff}
+
+/* ── PREMIUM / DATA SOURCE BADGES ─────────────────────────────────── */
+.source-badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;margin-bottom:4px;letter-spacing:.3px}
+.badge-pro{background:#2d1f5e;color:#c4b5fd}
+.badge-usda{background:#0d2e14;color:#6ee7b7}
+.pro-upsell{background:linear-gradient(135deg,#1e1040,#0d2e14)!important;border:1px solid #4a3a8a;border-radius:10px;padding:12px 14px;font-size:13px;line-height:1.6;margin-top:6px}
+.pro-upsell-btn{margin-left:8px;padding:5px 14px;background:#7c3aed;color:#fff;border:none;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap}
+.pro-upsell-btn:hover{background:#6d28d9}
+.pro-upsell-banner{background:linear-gradient(135deg,#1e1040,#0d2e14);border:1px solid #4a3a8a;border-radius:12px;padding:14px 16px;font-size:13px;line-height:1.6;margin-top:12px;text-align:center}

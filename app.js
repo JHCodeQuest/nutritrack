@@ -319,8 +319,8 @@ async function searchFood() {
   }
 
     if (products.length === 0) {
-      statusEl.textContent = '😕 No results found — try different keywords';
-      statusEl.className = 'search-status error';
+      // OFF returned nothing — try USDA + Nutritionix fallback chain
+      await _searchFallback(query, resultsEl, statusEl);
       return;
     }
 
@@ -420,42 +420,14 @@ function selectSearchResult(btn) {
   item.scrollIntoView({ behavior:'smooth', block:'nearest' });
 }
 
-// ── OPEN FOOD FACTS BARCODE LOOKUP ────────────────────────────────────────
+// ── BARCODE LOOKUP (entry point — chains through OFF → USDA → Nutritionix) ─
 async function lookupBarcode(barcode, statusId) {
   const sid = statusId || 'scanStatus';
-  barcode = String(barcode).trim().replace(/\D/g,'');
-  if (!barcode) { setStatus('Please enter a barcode','error',sid); return; }
-  setStatus('<span class="spinner"></span>Looking up…','',sid);
+  barcode = String(barcode).trim().replace(/\D/g, '');
+  if (!barcode) { setStatus('Please enter a barcode', 'error', sid); return; }
+  setStatus('<span class="spinner"></span>Looking up…', '', sid);
   hideFoodResult();
-  try {
-    const res  = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
-    const data = await res.json();
-    if (!data || data.status===0 || !data.product) { setStatus('❌ Product not found','error',sid); lastCode=null; return; }
-    const p=data.product, n=p.nutriments||{};
-    let kcal100 = _kcal100FromNutriments(n);
-    let factor=1, servingLabel='per 100g';
-    if (p.serving_size) { const m=p.serving_size.match(/([\d.]+)\s*g/i); if(m){factor=parseFloat(m[1])/100;servingLabel=`per serving (${p.serving_size})`;} }
-    const carbs100=n['carbohydrates_100g']||0, protein100=n['proteins_100g']||0, fat100=n['fat_100g']||0;
-    pendingFood = {
-      name:    p.product_name||p.product_name_en||'Unknown Product',
-      brand:   p.brands||'',
-      kcal:    Math.round(kcal100*factor),
-      carbs:   +((carbs100)*factor).toFixed(1),
-      protein: +((protein100)*factor).toFixed(1),
-      fat:     +((fat100)*factor).toFixed(1),
-      servingLabel, kcal100, carbs100, protein100, fat100, servingFactor:factor
-    };
-    showFoodResult(pendingFood);
-    setStatus('✅ Found! Choose meal and tap Add.','found',sid);
-    // If called from the live scan tab, stop the camera and collapse it
-    if (sid === 'scanStatus') {
-      stopQuagga();
-      const camArea = document.getElementById('cameraArea');
-      if (camArea) camArea.style.display = 'none';
-      const sawBtn = document.getElementById('scanAgainWrap');
-      if (sawBtn) sawBtn.style.display = '';
-    }
-  } catch(e) { setStatus('⚠️ Network error','error',sid); lastCode=null; }
+  await lookupBarcodeWithFallbacks(barcode, sid);
 }
 function lookupManual(){
   lastCode=null;
@@ -883,6 +855,260 @@ function _offSearchUrl(query, pageSize, extraFields) {
     : '';
   const fields = `product_name,brands,nutriments,serving_size,countries_tags${extraFields || ''}`;
   return `${base}?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=${pageSize}${countryFilter}&fields=${fields}`;
+}
+
+// ── PREMIUM SUBSCRIPTION ─────────────────────────────────────────────────
+// Subscription status is cached for the session to avoid repeated Firestore
+// reads.  The source-of-truth lives at Firestore path:
+//   users/{uid}/subscription/status  →  { status: "active" | "trialing" | "canceled" }
+//
+// ── PAYMENT INTEGRATION PLACEHOLDER ─────────────────────────────────────
+// To add real payments with Stripe:
+// 1. Install the "Run Payments with Stripe" Firebase Extension in the console.
+// 2. It will populate  users/{uid}/subscriptions/{subId}  automatically.
+// 3. Update _loadPremiumStatus() below to query that sub-collection.
+// 4. Add an "Upgrade" button in the user menu that opens a Stripe Checkout
+//    session (create via a Cloud Function  createCheckoutSession).
+// ─────────────────────────────────────────────────────────────────────────
+
+let _premiumStatus = null;   // null = not yet loaded, true/false once loaded
+
+async function _loadPremiumStatus() {
+  const auth = window._firebaseAuth;
+  const db   = window._firebaseDb;
+  if (!auth || !db) return false;
+  const user = auth.currentUser;
+  if (!user) return false;
+  try {
+    const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const snap = await getDoc(doc(db, 'users', user.uid, 'subscription', 'status'));
+    if (!snap.exists()) return false;
+    const s = snap.data().status;
+    return s === 'active' || s === 'trialing';
+  } catch (e) {
+    return false;
+  }
+}
+
+async function isPremiumUser() {
+  if (_premiumStatus !== null) return _premiumStatus;
+  _premiumStatus = await _loadPremiumStatus();
+  return _premiumStatus;
+}
+
+// Invalidate cached status on sign-out (firebase.js calls this via window)
+window._resetPremiumCache = function() { _premiumStatus = null; };
+
+/** Call a Firebase Cloud Function by name. Returns the result.data object. */
+async function _callFn(name, payload) {
+  const fns      = window._firebaseFunctions;
+  const callable = window._httpsCallable;
+  if (!fns || !callable) throw new Error('Firebase Functions not initialised');
+  const fn  = callable(fns, name);
+  const res = await fn(payload);
+  return res.data;
+}
+
+// ── PREMIUM UPSELL UI ──────────────────────────────────────────────────
+function _showProUpsell(statusElId) {
+  const el = document.getElementById(statusElId);
+  if (!el) return;
+  el.innerHTML = `⭐ <strong>NutriTrack Pro</strong> unlocks Nutritionix's 1M+ branded food database.
+    <button class="pro-upsell-btn" onclick="_openProModal()">Upgrade to Pro</button>`;
+  el.className = 'scan-status pro-upsell';
+}
+
+function _openProModal() {
+  // ── PLACEHOLDER ──────────────────────────────────────────────────────
+  // Replace the alert below with a real Stripe Checkout redirect:
+  //   const fn = _httpsCallable(_firebaseFunctions, 'createCheckoutSession');
+  //   const { url } = (await fn({ priceId: 'price_xxx' })).data;
+  //   window.location.href = url;
+  // ─────────────────────────────────────────────────────────────────────
+  alert('Pro subscriptions coming soon!\n\nWhen launched, Pro will unlock:\n• Nutritionix database (1M+ branded foods)\n• Priority barcode scanning\n• Advanced nutrition insights');
+}
+
+// ── USDA / NUTRITIONIX DATA HELPERS ──────────────────────────────────────
+
+/** Convert a normalised food object (from Cloud Function) into pendingFood format. */
+function _normalisedToPending(food) {
+  return {
+    name:         food.name,
+    brand:        food.brand || '',
+    kcal:         Math.round(food.kcal),
+    carbs:        +Number(food.carbs).toFixed(1),
+    protein:      +Number(food.protein).toFixed(1),
+    fat:          +Number(food.fat).toFixed(1),
+    servingLabel: food.servingLabel || 'per 100g',
+    kcal100:      food.kcal100,
+    carbs100:     food.carbs100,
+    protein100:   food.protein100,
+    fat100:       food.fat100,
+    servingFactor: food.servingFactor || 1,
+    source:       food.source || 'usda',
+  };
+}
+
+/** Build a source badge string for display in search results. */
+function _sourceBadge(source) {
+  if (source === 'nutritionix') return '<span class="source-badge badge-pro">⭐ Nutritionix</span>';
+  if (source === 'usda')        return '<span class="source-badge badge-usda">🇺🇸 USDA</span>';
+  return '';
+}
+
+// ── BARCODE LOOKUP FALLBACK CHAIN ─────────────────────────────────────────
+// Priority: Open Food Facts → USDA (free) → Nutritionix (Pro only)
+
+async function lookupBarcodeWithFallbacks(barcode, statusId) {
+  const sid = statusId || 'scanStatus';
+
+  // 1 ── Open Food Facts (already handles the happy path)
+  // We'll call the existing lookupBarcode logic but return early if found.
+  // Re-use the existing implementation by monkey-patching the result:
+  const offFound = await _lookupBarcodeOFF(barcode, sid);
+  if (offFound) return;
+
+  // 2 ── USDA FoodData Central (free fallback)
+  setStatus('<span class="spinner"></span>Checking USDA database…', '', sid);
+  try {
+    const usdaResult = await _callFn('usdaBarcode', { barcode });
+    if (usdaResult && usdaResult.food) {
+      pendingFood = _normalisedToPending(usdaResult.food);
+      showFoodResult(pendingFood);
+      setStatus('✅ Found in USDA database.', 'found', sid);
+      if (sid === 'scanStatus') { stopQuagga(); const ca = document.getElementById('cameraArea'); if (ca) ca.style.display = 'none'; const saw = document.getElementById('scanAgainWrap'); if (saw) saw.style.display = ''; }
+      return;
+    }
+  } catch (e) {
+    if (e?.code !== 'functions/not-found') console.warn('USDA barcode error:', e);
+  }
+
+  // 3 ── Nutritionix (Pro subscribers only)
+  const pro = await isPremiumUser();
+  if (pro) {
+    setStatus('<span class="spinner"></span>Checking Nutritionix…', '', sid);
+    try {
+      const nxResult = await _callFn('nutritionixBarcode', { barcode });
+      if (nxResult && nxResult.food) {
+        pendingFood = _normalisedToPending(nxResult.food);
+        showFoodResult(pendingFood);
+        setStatus('✅ Found in Nutritionix (Pro).', 'found', sid);
+        if (sid === 'scanStatus') { stopQuagga(); const ca = document.getElementById('cameraArea'); if (ca) ca.style.display = 'none'; const saw = document.getElementById('scanAgainWrap'); if (saw) saw.style.display = ''; }
+        return;
+      }
+    } catch (e) {
+      if (e?.code !== 'functions/not-found') console.warn('Nutritionix barcode error:', e);
+    }
+  }
+
+  // Nothing found anywhere
+  setStatus('❌ Product not found in any database', 'error', sid);
+  lastCode = null;
+  if (!pro) _showProUpsell(sid);
+}
+
+/** Open Food Facts barcode lookup — extracted so the fallback chain can call it. */
+async function _lookupBarcodeOFF(barcode, sid) {
+  barcode = String(barcode).trim().replace(/\D/g, '');
+  if (!barcode) { setStatus('Please enter a barcode', 'error', sid); return false; }
+  try {
+    const res  = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+    const data = await res.json();
+    if (!data || data.status === 0 || !data.product) return false;
+    const p = data.product, n = p.nutriments || {};
+    let kcal100 = _kcal100FromNutriments(n);
+    let factor = 1, servingLabel = 'per 100g';
+    if (p.serving_size) { const m = p.serving_size.match(/([\d.]+)\s*g/i); if (m) { factor = parseFloat(m[1]) / 100; servingLabel = `per serving (${p.serving_size})`; } }
+    const carbs100 = n['carbohydrates_100g'] || 0, protein100 = n['proteins_100g'] || 0, fat100 = n['fat_100g'] || 0;
+    pendingFood = {
+      name: p.product_name || p.product_name_en || 'Unknown Product',
+      brand: p.brands || '',
+      kcal: Math.round(kcal100 * factor),
+      carbs: +((carbs100) * factor).toFixed(1),
+      protein: +((protein100) * factor).toFixed(1),
+      fat: +((fat100) * factor).toFixed(1),
+      servingLabel, kcal100, carbs100, protein100, fat100, servingFactor: factor,
+      source: 'off',
+    };
+    showFoodResult(pendingFood);
+    setStatus('✅ Found! Choose meal and tap Add.', 'found', sid);
+    if (sid === 'scanStatus') { stopQuagga(); const camArea = document.getElementById('cameraArea'); if (camArea) camArea.style.display = 'none'; const sawBtn = document.getElementById('scanAgainWrap'); if (sawBtn) sawBtn.style.display = ''; }
+    return true;
+  } catch (e) {
+    return false;  // network error → let the fallback chain continue
+  }
+}
+
+// ── SEARCH FALLBACK CHAIN ─────────────────────────────────────────────────
+// Used by searchFood() when Open Food Facts returns 0 results.
+// Tries USDA first (free), then Nutritionix if the user is on Pro.
+
+async function _searchFallback(query, resultsEl, statusEl) {
+  // 1 ── USDA
+  statusEl.innerHTML = '<span class="spinner"></span>Searching USDA database…';
+  statusEl.className = 'search-status';
+  let usdaFoods = [];
+  try {
+    const r = await _callFn('usdaSearch', { query, limit: 20 });
+    usdaFoods = r.foods || [];
+  } catch (e) {
+    console.warn('USDA search error:', e);
+  }
+
+  // 2 ── Nutritionix (Pro)
+  const pro = await isPremiumUser();
+  let nxFoods = [];
+  if (pro) {
+    statusEl.innerHTML = '<span class="spinner"></span>Searching Nutritionix (Pro)…';
+    try {
+      const r = await _callFn('nutritionixSearch', { query, limit: 10 });
+      nxFoods = r.foods || [];
+    } catch (e) {
+      console.warn('Nutritionix search error:', e);
+    }
+  }
+
+  const all = [...nxFoods, ...usdaFoods];
+
+  if (!all.length) {
+    statusEl.textContent = '😕 No results found anywhere — try different keywords';
+    statusEl.className = 'search-status error';
+    if (!pro) _showProUpsellInline(resultsEl);
+    return;
+  }
+
+  statusEl.textContent = `${all.length} result${all.length !== 1 ? 's' : ''} from ${pro ? 'Nutritionix + ' : ''}USDA`;
+  statusEl.className = 'search-status';
+  resultsEl.innerHTML = '';
+
+  all.forEach(food => {
+    const item = document.createElement('div');
+    item.className = 'search-result-item';
+    const foodObj = _normalisedToPending(food);
+    item.dataset.food = JSON.stringify(foodObj);
+    item.innerHTML = `
+      <div class="sri-left">
+        ${_sourceBadge(food.source)}
+        <div class="sri-name">${escHtml(food.name)}</div>
+        ${food.brand ? `<div class="sri-brand">${escHtml(food.brand)}</div>` : ''}
+      </div>
+      <div class="sri-right">
+        <div class="sri-kcal">${foodObj.kcal} kcal</div>
+        <div class="sri-macros">${foodObj.carbs}g C · ${foodObj.protein}g P · ${foodObj.fat}g F</div>
+        <button class="sri-select-btn" onclick="selectSearchResult(this)">Select</button>
+      </div>`;
+    resultsEl.appendChild(item);
+  });
+
+  if (!pro) _showProUpsellInline(resultsEl);
+}
+
+function _showProUpsellInline(container) {
+  const banner = document.createElement('div');
+  banner.className = 'pro-upsell-banner';
+  banner.innerHTML = `⭐ <strong>Upgrade to Pro</strong> for access to Nutritionix's 1M+ food database.
+    <button class="pro-upsell-btn" onclick="_openProModal()">Learn more</button>`;
+  container.appendChild(banner);
 }
 
 // ── SEARCH OPTIMISATION ─────────────────────────────────────────────────

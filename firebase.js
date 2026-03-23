@@ -5,6 +5,8 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
                                                   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, onSnapshot }
                                                   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFunctions, httpsCallable }
+                                                  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
 
 // Your Firebase project config — these are safe to be in frontend code
 const firebaseConfig = {
@@ -17,9 +19,10 @@ const firebaseConfig = {
 };
 
 // Initialise Firebase — think of this like "connecting to the database"
-const firebaseApp = initializeApp(firebaseConfig);
-const auth        = getAuth(firebaseApp);       // handles login/logout
-const db          = getFirestore(firebaseApp);  // the cloud database
+const firebaseApp  = initializeApp(firebaseConfig);
+const auth         = getAuth(firebaseApp);         // handles login/logout
+const db           = getFirestore(firebaseApp);    // the cloud database
+const functions    = getFunctions(firebaseApp);    // cloud functions proxy
 
 // ── AUTH STATE ───────────────────────────────────────────────────────────
 // This function runs automatically whenever the login state changes
@@ -91,6 +94,8 @@ function unsubscribeFirestore() {
   meals.forEach(m => m.items = []);
   renderMeals();
   updateSummary();
+  // Reset the cached premium status so the next user starts fresh
+  if (window._resetPremiumCache) window._resetPremiumCache();
 }
 
 // Save current day's meals to Firestore
@@ -126,6 +131,8 @@ window.resubscribeForDate = function() {
   subscribeToFirestore(user.uid);
 };
 
-// Make db and auth accessible to non-module scripts
-window._firebaseAuth = auth;
-window._firebaseDb   = db;
+// Make db, auth, and functions accessible to non-module scripts
+window._firebaseAuth      = auth;
+window._firebaseDb        = db;
+window._firebaseFunctions = functions;
+window._httpsCallable     = httpsCallable;
